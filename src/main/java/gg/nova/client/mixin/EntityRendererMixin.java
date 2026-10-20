@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Skips rendering of far-away entities (never players or very large mobs). */
 @Mixin(EntityRenderer.class)
 public abstract class EntityRendererMixin<T extends Entity> {
-    @Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true, require = 0)
     private void nova$cull(T entity, Frustum frustum, double x, double y, double z, CallbackInfoReturnable<Boolean> cir) {
         Config.Settings s = Config.cur();
         if (!s.entityCull || entity instanceof PlayerEntity || entity.getWidth() > 3f) return;
