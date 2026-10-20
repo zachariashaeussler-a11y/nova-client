@@ -9,22 +9,30 @@ import net.minecraft.text.Text;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
 
 public class NovaScreen extends Screen {
-    static final String[] TABS = {"Visuals", "Themes", "Render", "Profiles", "Custom"};
+    static final String[] TABS = {"Visuals", "Modules", "Themes", "Render", "Profiles", "Custom"};
+    static final String[] SUBS = {"Presets", "Accent", "Accent 2", "Background"};
     static final String[] CORNERS = {"Top left", "Top right", "Bottom left", "Bottom right"};
     static final String[] BOOST = {"Off", "Balanced", "Max"};
     static final Object[][] THEMES = {
             {"Neon", 0x7C5CFF, 0x00E5FF}, {"Ember", 0xFF6A3D, 0xFFC857}, {"Forest", 0x3DDC97, 0xB6F09C},
-            {"Ocean", 0x2F8CFF, 0x5EF2D6}, {"Rose", 0xFF4D8D, 0xFFB3D1}, {"Mono", 0xFFFFFF, 0x8A8A8A}};
-    static int tab = 0;
+            {"Ocean", 0x2F8CFF, 0x5EF2D6}, {"Rose", 0xFF4D8D, 0xFFB3D1}, {"Mono", 0xFFFFFF, 0x8A8A8A},
+            {"Sunset", 0xFF5F6D, 0xFFC371}, {"Aurora", 0x00F5A0, 0x00D9F5}, {"Grape", 0xB721FF, 0x21D4FD},
+            {"Mint", 0x5EFCE8, 0x736EFE}, {"Gold", 0xF9D423, 0xFF4E50}, {"Ice", 0x74EBD5, 0xACB6E5},
+            {"Crimson", 0xE53935, 0xFF8A80}, {"Midnight", 0x6A11CB, 0x2575FC}};
+    static int tab = 0, sub = 0;
 
     final Screen parent;
     TextFieldWidget field;
     String note = "";
     int noteY;
+    final List<int[]> sw = new ArrayList<>();
 
     public NovaScreen(Screen parent) { super(Text.literal("NOVA Client")); this.parent = parent; }
 
@@ -36,16 +44,18 @@ public class NovaScreen extends Screen {
         Config.Settings s = Config.cur();
         int x = px() + 10, y = py() + 52, w = 340;
         note = "";
+        sw.clear();
         for (int i = 0; i < TABS.length; i++) {
             int n = i;
             addDrawableChild(ButtonWidget.builder(Text.literal(TABS[i]), b -> { tab = n; clearAndInit(); })
-                    .dimensions(px() + 10 + i * 68, py() + 24, 66, 20).build());
+                    .dimensions(px() + 10 + i * 56, py() + 24, 54, 20).build());
         }
         switch (tab) {
             case 0 -> visuals(s, x, y, w);
-            case 1 -> themes(s, x, y, w);
-            case 2 -> renderTab(s, x, y, w);
-            case 3 -> profiles(s, x, y, w);
+            case 1 -> modules(s, x, y, w);
+            case 2 -> themes(s, x, y, w);
+            case 3 -> renderTab(s, x, y, w);
+            case 4 -> profiles(s, x, y, w);
             default -> custom(s, x, y, w);
         }
         addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close())
@@ -56,32 +66,70 @@ public class NovaScreen extends Screen {
 
     void visuals(Config.Settings s, int x, int y, int w) {
         toggle("HUD overlay", x, y, w, () -> s.hud, v -> s.hud = v);
-        toggle("Show FPS", x, y + 24, w, () -> s.showFps, v -> s.showFps = v);
-        toggle("HUD background", x, y + 48, w, () -> s.hudBg, v -> s.hudBg = v);
-        slider("HUD scale %", x, y + 72, w, 50, 200, s.hudScale, v -> s.hudScale = v.intValue());
+        toggle("HUD background", x, y + 24, w, () -> s.hudBg, v -> s.hudBg = v);
+        slider("HUD scale %", x, y + 48, w, 50, 200, s.hudScale, v -> s.hudScale = v.intValue());
         addDrawableChild(ButtonWidget.builder(Text.literal("HUD corner: " + CORNERS[s.corner]), b -> {
             s.corner = (s.corner + 1) % 4;
             b.setMessage(Text.literal("HUD corner: " + CORNERS[s.corner]));
-        }).dimensions(x, y + 96, w, 20).build());
+        }).dimensions(x, y + 72, w, 20).build());
+        note = "Modules and colors are in the next tabs.";
+        noteY = y + 100;
+    }
+
+    void modules(Config.Settings s, int x, int y, int w) {
+        for (int i = 0; i < NovaClient.MODS.length; i++) {
+            String n = NovaClient.MODS[i];
+            Config.Mod m = s.mod(n);
+            int cx = x + (i % 2) * 175, cy = y + (i / 2) * 24;
+            addDrawableChild(ButtonWidget.builder(txt(n, m.on), b -> {
+                m.on = !m.on;
+                b.setMessage(txt(n, m.on));
+            }).dimensions(cx, cy, 100, 20).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal(NovaClient.colorName(m.color)), b -> {
+                m.color = NovaClient.nextColor(m.color);
+                b.setMessage(Text.literal(NovaClient.colorName(m.color)));
+            }).dimensions(cx + 102, cy, 62, 20).build());
+        }
+        slider("Zoom FOV (hold Z)", x, y + 144, w, 30, 70, s.zoomFov, v -> s.zoomFov = v.intValue());
     }
 
     void themes(Config.Settings s, int x, int y, int w) {
-        for (int i = 0; i < THEMES.length; i++) {
-            Object[] t = THEMES[i];
-            addDrawableChild(ButtonWidget.builder(Text.literal((String) t[0]), b -> {
-                s.theme = (String) t[0]; s.accent = (int) t[1]; s.accent2 = (int) t[2]; clearAndInit();
-            }).dimensions(x + (i % 3) * 115, y + (i / 3) * 24, 110, 20).build());
+        for (int i = 0; i < SUBS.length; i++) {
+            int n = i;
+            addDrawableChild(ButtonWidget.builder(Text.literal((sub == i ? "> " : "") + SUBS[i]), b -> { sub = n; clearAndInit(); })
+                    .dimensions(x + i * 86, y, 82, 20).build());
         }
-        slider("Accent red", x, y + 60, w, 0, 255, (s.accent >> 16) & 255, v -> setAccent(s, 16, v.intValue()));
-        slider("Accent green", x, y + 84, w, 0, 255, (s.accent >> 8) & 255, v -> setAccent(s, 8, v.intValue()));
-        slider("Accent blue", x, y + 108, w, 0, 255, s.accent & 255, v -> setAccent(s, 0, v.intValue()));
-        note = "Current theme: " + s.theme;
-        noteY = y + 136;
+        int y0 = y + 28;
+        if (sub == 0) {
+            for (int i = 0; i < THEMES.length; i++) {
+                Object[] t = THEMES[i];
+                int bx = x + (i % 3) * 115, by = y0 + (i / 3) * 24;
+                addDrawableChild(ButtonWidget.builder(Text.literal("" + t[0]), b -> {
+                    s.theme = (String) t[0]; s.accent = (int) t[1]; s.accent2 = (int) t[2]; clearAndInit();
+                }).dimensions(bx, by, 110, 20).build());
+                sw.add(new int[]{bx + 5, by + 4, (int) t[1], (int) t[2]});
+            }
+            note = "Current theme: " + s.theme;
+            noteY = y0 + 126;
+        } else if (sub == 1) {
+            rgb("Accent", x, y0, w, () -> s.accent, v -> { s.accent = v; s.theme = "Custom"; });
+            note = "Accent: HUD bar, menu lines, first gradient color.";
+            noteY = y0 + 76;
+        } else if (sub == 2) {
+            rgb("Accent 2", x, y0, w, () -> s.accent2, v -> { s.accent2 = v; s.theme = "Custom"; });
+            note = "Accent 2: second gradient color and menu line.";
+            noteY = y0 + 76;
+        } else {
+            rgb("Background", x, y0, w, () -> s.bgColor, v -> s.bgColor = v);
+            slider("Opacity %", x, y0 + 72, w, 0, 100, s.bgAlpha, v -> s.bgAlpha = v.intValue());
+            slider("Rainbow speed", x, y0 + 96, w, 1, 100, s.chromaSpeed, v -> s.chromaSpeed = v.intValue());
+        }
     }
 
-    void setAccent(Config.Settings s, int shift, int v) {
-        s.accent = (s.accent & ~(255 << shift)) | (v << shift);
-        s.theme = "Custom";
+    void rgb(String name, int x, int y, int w, IntSupplier get, IntConsumer set) {
+        slider(name + " red", x, y, w, 0, 255, (get.getAsInt() >> 16) & 255, v -> set.accept((get.getAsInt() & 0x00FFFF) | (v.intValue() << 16)));
+        slider(name + " green", x, y + 24, w, 0, 255, (get.getAsInt() >> 8) & 255, v -> set.accept((get.getAsInt() & 0xFF00FF) | (v.intValue() << 8)));
+        slider(name + " blue", x, y + 48, w, 0, 255, get.getAsInt() & 255, v -> set.accept((get.getAsInt() & 0xFFFF00) | v.intValue()));
     }
 
     void renderTab(Config.Settings s, int x, int y, int w) {
@@ -93,9 +141,8 @@ public class NovaScreen extends Screen {
         }).dimensions(x, y, w, 20).build());
         toggle("Entity culling", x, y + 24, w, () -> s.entityCull, v -> s.entityCull = v);
         slider("Cull distance (blocks)", x, y + 48, w, 16, 128, s.cullDist, v -> s.cullDist = v.intValue());
-      
         note = "Boost edits your video settings; Off restores them.";
-        noteY = y + 100;
+        noteY = y + 78;
     }
 
     void profiles(Config.Settings s, int x, int y, int w) {
@@ -211,6 +258,10 @@ public class NovaScreen extends Screen {
     @Override
     public void render(DrawContext c, int mx, int my, float d) {
         super.render(c, mx, my, d);
+        for (int[] a : sw) {
+            c.fill(a[0], a[1], a[0] + 6, a[1] + 6, 0xFF000000 | a[2]);
+            c.fill(a[0], a[1] + 6, a[0] + 6, a[1] + 12, 0xFF000000 | a[3]);
+        }
         if (!note.isEmpty()) c.drawTextWithShadow(textRenderer, note, px() + 10, noteY, 0xFFAAAAAA);
     }
 

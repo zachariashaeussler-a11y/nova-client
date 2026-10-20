@@ -13,16 +13,27 @@ import java.util.*;
 public class Config {
     public static class Custom { public String name, type; public double value; }
 
+    /** One module: on/off + color code (-1 = theme gradient, -2 = rainbow, otherwise 0xRRGGBB). */
+    public static class Mod { public boolean on; public int color = -1; }
+
     public static class Settings {
         public String theme = "Neon";
         public int accent = 0x7C5CFF, accent2 = 0x00E5FF;
+        public int bgColor = 0x000000, bgAlpha = 56, chromaSpeed = 30;
         public boolean hud = true, showFps = true, hudBg = true;
         public int hudScale = 100, corner = 0;
         public String boost = "Off";
         public boolean entityCull = true;
         public int cullDist = 64;       // blocks
-        public int unfocusedFps = 15;   // 0 = off
+        public int unfocusedFps = 15;   // unused (feature removed)
+        public int zoomFov = 30;
+        public Map<String, Mod> mods = new LinkedHashMap<>();
         public List<Custom> custom = new ArrayList<>();
+
+        public Mod mod(String name) {
+            if (mods == null) mods = new LinkedHashMap<>();
+            return mods.computeIfAbsent(name, k -> { Mod m = new Mod(); m.on = k.equals("FPS"); return m; });
+        }
     }
 
     public String active = "Default";
