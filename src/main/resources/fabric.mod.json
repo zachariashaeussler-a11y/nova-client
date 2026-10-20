@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "novaclient",
+  "version": "${version}",
+  "name": "NOVA Client",
+  "description": "Client-side settings hub with themes, profiles, custom settings and built-in FPS boost.",
+  "authors": ["You"],
+  "environment": "client",
+  "entrypoints": { "client": ["gg.nova.client.NovaClient"] },
+  "mixins": ["novaclient.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
