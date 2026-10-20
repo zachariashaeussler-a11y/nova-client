@@ -93,7 +93,7 @@ public class NovaScreen extends Screen {
         }).dimensions(x, y, w, 20).build());
         toggle("Entity culling", x, y + 24, w, () -> s.entityCull, v -> s.entityCull = v);
         slider("Cull distance (blocks)", x, y + 48, w, 16, 128, s.cullDist, v -> s.cullDist = v.intValue());
-        slider("FPS when unfocused (0 = off)", x, y + 72, w, 0, 60, s.unfocusedFps, v -> s.unfocusedFps = v.intValue());
+      
         note = "Boost edits your video settings; Off restores them.";
         noteY = y + 100;
     }
