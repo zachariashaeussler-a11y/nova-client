@@ -51,6 +51,16 @@ public class RenderMods {
         };
     }
 
+    public static String shortText(String n, int v) {
+        return switch (n) {
+            case "Fullbright", "No FOV Fx", "No Distort", "Low Entities" -> v + "%";
+            case "No Clouds" -> v == 0 ? "Off" : "Fast";
+            case "Min Particles" -> v == 0 ? "Minimal" : "Decreased";
+            case "Uncapped" -> v >= 260 ? "Unlimited" : "" + v;
+            default -> "" + v;
+        };
+    }
+
     static String target(String n, Config.Settings s) {
         int v = value(s, n);
         return switch (n) {
