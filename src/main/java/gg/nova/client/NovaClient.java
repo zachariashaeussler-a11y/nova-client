@@ -23,21 +23,28 @@ import java.util.Locale;
 public class NovaClient implements ClientModInitializer {
     public static KeyBinding menuKey, zoomKey;
 
-    /** Module names, in menu order. */
-    public static final String[] MODS = {"FPS", "Coords", "CPS", "Ping", "Direction", "Speed", "Memory", "Clock", "Armor", "Keys", "Sprint", "Zoom"};
+    /** HUD modules (movable boxes). */
+    public static final String[] HUDMODS = {"FPS", "Coords", "CPS", "Ping", "Direction", "Speed", "Memory", "Clock", "Watermark", "Armor", "Keys"};
+    /** All modules shown in the Modules tab. */
+    public static final String[] MODS = {"FPS", "Coords", "CPS", "Ping", "Direction", "Speed", "Memory", "Clock", "Watermark", "Armor", "Keys", "Sprint", "Zoom"};
 
-    /** Color choices for modules: -1 = theme gradient, -2 = rainbow. */
-    static final String[] PN = {"Theme", "Rainbow", "White", "Red", "Orange", "Yellow", "Lime", "Green", "Cyan", "Blue", "Purple", "Pink", "Gray"};
-    static final int[] PC = {-1, -2, 0xFFFFFF, 0xFF4D4D, 0xFF9F43, 0xFFE066, 0xA6E22E, 0x3DDC97, 0x00E5FF, 0x2F8CFF, 0x7C5CFF, 0xFF4D8D, 0xAAAAAA};
+    /** Color choices: negative codes are special modes. */
+    static final String[] PN = {"Theme", "Rainbow", "Pulse", "Wave", "Custom", "White", "Red", "Orange", "Gold", "Yellow", "Lime", "Green", "Mint",
+            "Teal", "Cyan", "Sky", "Blue", "Indigo", "Purple", "Magenta", "Pink", "Coral", "Peach", "Silver", "Gray", "Black"};
+    static final int[] PC = {-1, -2, -3, -4, -5, 0xFFFFFF, 0xFF4D4D, 0xFF9F43, 0xFFD700, 0xFFE066, 0xA6E22E, 0x3DDC97, 0x98FFC8,
+            0x14B8A6, 0x00E5FF, 0x87CEEB, 0x2F8CFF, 0x4B5BD8, 0x7C5CFF, 0xFF00FF, 0xFF4D8D, 0xFF7F50, 0xFFDAB9, 0xC0C0C0, 0x808080, 0x000000};
 
     static int idxOf(int code) { for (int i = 0; i < PC.length; i++) if (PC[i] == code) return i; return 0; }
     public static String colorName(int code) { return PN[idxOf(code)]; }
     public static int nextColor(int code) { return PC[(idxOf(code) + 1) % PC.length]; }
+    public static int prevColor(int code) { return PC[(idxOf(code) + PC.length - 1) % PC.length]; }
 
+    static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
     static final ArrayDeque<Long> clicksL = new ArrayDeque<>(), clicksR = new ArrayDeque<>();
     static boolean wasL, wasR;
     static double speed, lx, lz;
-    static int ping, savedFov = -1;
+    static int ping, tickN;
+    public static int savedFov = -1;
 
     @Override
     @SuppressWarnings("deprecation")
@@ -57,6 +64,7 @@ public class NovaClient implements ClientModInitializer {
     static void tick(MinecraftClient mc) {
         while (menuKey.wasPressed()) mc.setScreen(new NovaScreen(mc.currentScreen));
         Config.Settings s = Config.cur();
+        if (mc.options != null && ++tickN % 10 == 0) RenderMods.sync(s);
         var fov = mc.options.getFov();
         if (mc.player == null) {
             if (savedFov >= 0) { fov.setValue(savedFov); savedFov = -1; }
@@ -99,7 +107,11 @@ public class NovaClient implements ClientModInitializer {
     /* ---------------- colors ---------------- */
 
     static int resolve(Config.Settings s, int code, int i, int n) {
-        if (code == -2) return 0xFF000000 | hsv(((System.currentTimeMillis() / 1000.0) * s.chromaSpeed / 100.0 + i * 0.08) % 1.0);
+        long t = System.currentTimeMillis();
+        if (code == -2) return 0xFF000000 | hsv(((t / 1000.0) * s.chromaSpeed / 100.0 + i * 0.08) % 1.0);
+        if (code == -3) return 0xFF000000 | lerp(s.accent, s.accent2, (float) (0.5 + 0.5 * Math.sin(t / 400.0 * s.chromaSpeed / 30.0)));
+        if (code == -4) return 0xFF000000 | lerp(s.accent, s.accent2, (float) (0.5 + 0.5 * Math.sin(t / 600.0 * s.chromaSpeed / 30.0 + i * 0.9)));
+        if (code == -5) return 0xFF000000 | s.textColor;
         if (code == -1) return 0xFF000000 | lerp(s.accent, s.accent2, n <= 1 ? 0f : i / (float) (n - 1));
         return 0xFF000000 | code;
     }
@@ -126,86 +138,139 @@ public class NovaClient implements ClientModInitializer {
         return ((int) (r * 255) << 16) | ((int) (g * 255) << 8) | (int) (b * 255);
     }
 
-    /* ---------------- HUD ---------------- */
+    /* ---------------- module boxes ---------------- */
 
-    static void put(List<String> lines, List<Integer> codes, Config.Settings s, String mod, String text) {
-        Config.Mod m = s.mod(mod);
-        if (m.on) { lines.add(text); codes.add(m.color); }
+    public static class Box { public String name, text = ""; public int x, y, w, h; public float sc; }
+
+    static String text(MinecraftClient mc, String n) {
+        var p = mc.player;
+        return switch (n) {
+            case "FPS" -> "FPS " + mc.getCurrentFps();
+            case "Coords" -> "XYZ " + (int) Math.floor(p.getX()) + " " + (int) Math.floor(p.getY()) + " " + (int) Math.floor(p.getZ());
+            case "CPS" -> "CPS " + clicksL.size() + " | " + clicksR.size();
+            case "Ping" -> "Ping " + ping + " ms";
+            case "Direction" -> "Facing " + p.getHorizontalFacing().name();
+            case "Speed" -> String.format(Locale.ROOT, "%.1f b/s", speed);
+            case "Memory" -> {
+                Runtime rt = Runtime.getRuntime();
+                yield "RAM " + ((rt.totalMemory() - rt.freeMemory()) >> 20) + "/" + (rt.maxMemory() >> 20) + " MB";
+            }
+            case "Clock" -> LocalTime.now().format(CLOCK);
+            case "Watermark" -> "NOVA Client | " + Config.I.active;
+            default -> "";
+        };
     }
 
-    static void hud(DrawContext ctx) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        Config.Settings s = Config.cur();
-        if (!s.hud || mc.options.hudHidden || mc.player == null) return;
+    /** Enabled HUD modules with their on-screen position and size. Unmoved modules are auto-placed. */
+    public static List<Box> boxes(MinecraftClient mc, Config.Settings s, int sw, int sh) {
         var tr = mc.textRenderer;
-        int vw0 = ctx.getScaledWindowWidth(), vh0 = ctx.getScaledWindowHeight();
-
-        // ---- text modules, stacked in the chosen corner ----
-        List<String> lines = new ArrayList<>();
-        List<Integer> codes = new ArrayList<>();
-        put(lines, codes, s, "FPS", "FPS " + mc.getCurrentFps());
-        put(lines, codes, s, "Coords", "XYZ " + (int) Math.floor(mc.player.getX()) + " " + (int) Math.floor(mc.player.getY()) + " " + (int) Math.floor(mc.player.getZ()));
-        put(lines, codes, s, "CPS", "CPS " + clicksL.size() + " | " + clicksR.size());
-        put(lines, codes, s, "Ping", "Ping " + ping + " ms");
-        put(lines, codes, s, "Direction", "Facing " + mc.player.getHorizontalFacing().name());
-        put(lines, codes, s, "Speed", String.format(Locale.ROOT, "%.1f b/s", speed));
-        Runtime rt = Runtime.getRuntime();
-        put(lines, codes, s, "Memory", "RAM " + ((rt.totalMemory() - rt.freeMemory()) >> 20) + "/" + (rt.maxMemory() >> 20) + " MB");
-        put(lines, codes, s, "Clock", LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")));
-
-        if (!lines.isEmpty()) {
-            int w = 0;
-            for (String l : lines) w = Math.max(w, tr.getWidth(l));
-            w += 10;
-            int h = lines.size() * 10 + 4;
-            float sc = s.hudScale / 100f;
-            int vw = (int) (vw0 / sc), vh = (int) (vh0 / sc);
-            int x = (s.corner % 2 == 0) ? 4 : vw - w - 4;
-            int y = (s.corner < 2) ? 4 : vh - h - 4;
-            int bg = (((int) (s.bgAlpha * 2.55f)) << 24) | s.bgColor;
-            ctx.getMatrices().pushMatrix();
-            ctx.getMatrices().scale(sc, sc);
-            if (s.hudBg) ctx.fill(x, y, x + w, y + h, bg);
-            ctx.fill(x, y, x + 2, y + h, resolve(s, -1, 0, 1));
-            for (int i = 0; i < lines.size(); i++)
-                ctx.drawTextWithShadow(tr, lines.get(i), x + 6, y + 3 + i * 10, resolve(s, codes.get(i), i, lines.size()));
-            ctx.getMatrices().popMatrix();
+        List<Box> out = new ArrayList<>();
+        float base = s.hudScale / 100f;
+        for (String n : HUDMODS) {
+            Config.Mod m = s.mod(n);
+            if (!m.on) continue;
+            Box b = new Box();
+            b.name = n;
+            b.sc = base * m.scale / 100f;
+            if (n.equals("Armor")) { b.w = Math.round(56 * b.sc); b.h = Math.round(72 * b.sc); }
+            else if (n.equals("Keys")) { b.w = Math.round(60 * b.sc); b.h = Math.round(72 * b.sc); }
+            else { b.text = text(mc, n); b.w = Math.round((tr.getWidth(b.text) + 10) * b.sc); b.h = Math.round(14 * b.sc); }
+            out.add(b);
         }
+        int top = 4, bottom = 4;
+        for (Box b : out) {
+            Config.Mod m = s.mod(b.name);
+            if (m.fx >= 0) { b.x = (int) (m.fx * sw); b.y = (int) (m.fy * sh); }
+            else if (b.name.equals("Keys")) { b.x = 6; b.y = sh / 2 - b.h / 2; }
+            else if (b.name.equals("Armor")) { b.x = sw - b.w - 4; b.y = sh / 2 - b.h / 2; }
+            else {
+                b.x = (s.corner % 2 == 0) ? 4 : sw - b.w - 4;
+                if (s.corner < 2) { b.y = top; top += b.h + 2; }
+                else { b.y = sh - bottom - b.h; bottom += b.h + 2; }
+            }
+            b.x = Math.max(0, Math.min(sw - b.w, b.x));
+            b.y = Math.max(0, Math.min(sh - b.h, b.y));
+        }
+        return out;
+    }
 
-        // ---- keystrokes (left side) ----
-        Config.Mod km = s.mod("Keys");
-        if (km.on) {
+    static void outline(DrawContext c, int x, int y, int w, int h, int col) {
+        c.fill(x, y, x + w, y + 1, col);
+        c.fill(x, y + h - 1, x + w, y + h, col);
+        c.fill(x, y, x + 1, y + h, col);
+        c.fill(x + w - 1, y, x + w, y + h, col);
+    }
+
+    public static void drawBox(DrawContext ctx, MinecraftClient mc, Config.Settings s, Box b, int idx, int n, boolean preview) {
+        var tr = mc.textRenderer;
+        Config.Mod m = s.mod(b.name);
+        int bg = (((int) (s.bgAlpha * 2.55f)) << 24) | s.bgColor;
+        ctx.getMatrices().pushMatrix();
+        ctx.getMatrices().translate((float) b.x, (float) b.y);
+        ctx.getMatrices().scale(b.sc, b.sc);
+        if (b.name.equals("Keys")) {
             var o = mc.options;
-            int x = 6, y = vh0 / 2 - 31;
-            key(ctx, s, km, "W", o.forwardKey.isPressed(), x + 20, y, 18, 18);
-            key(ctx, s, km, "A", o.leftKey.isPressed(), x, y + 20, 18, 18);
-            key(ctx, s, km, "S", o.backKey.isPressed(), x + 20, y + 20, 18, 18);
-            key(ctx, s, km, "D", o.rightKey.isPressed(), x + 40, y + 20, 18, 18);
-            key(ctx, s, km, "LMB", o.attackKey.isPressed(), x, y + 40, 29, 18);
-            key(ctx, s, km, "RMB", o.useKey.isPressed(), x + 31, y + 40, 29, 18);
-            key(ctx, s, km, "SPACE", o.jumpKey.isPressed(), x, y + 60, 60, 12);
-        }
-
-        // ---- armor (right side) ----
-        Config.Mod am = s.mod("Armor");
-        if (am.on) {
+            key(ctx, s, m, "W", o.forwardKey.isPressed(), 20, 0, 18, 18);
+            key(ctx, s, m, "A", o.leftKey.isPressed(), 0, 20, 18, 18);
+            key(ctx, s, m, "S", o.backKey.isPressed(), 20, 20, 18, 18);
+            key(ctx, s, m, "D", o.rightKey.isPressed(), 40, 20, 18, 18);
+            key(ctx, s, m, "LMB", o.attackKey.isPressed(), 0, 40, 29, 18);
+            key(ctx, s, m, "RMB", o.useKey.isPressed(), 31, 40, 29, 18);
+            key(ctx, s, m, "SPACE", o.jumpKey.isPressed(), 0, 60, 60, 12);
+        } else if (b.name.equals("Armor")) {
             EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
-            int ax = vw0 - 56, ay = vh0 / 2 - 36;
             for (int i = 0; i < 4; i++) {
                 ItemStack st = mc.player.getEquippedStack(slots[i]);
-                if (st.isEmpty()) continue;
-                int yy = ay + i * 18;
-                ctx.drawItem(st, ax, yy);
+                int yy = i * 18;
+                if (st.isEmpty()) {
+                    if (preview) ctx.fill(1, yy + 1, 15, yy + 15, 0x40FFFFFF);
+                    continue;
+                }
+                ctx.drawItem(st, 0, yy);
                 if (st.isDamageable())
-                    ctx.drawTextWithShadow(tr, "" + (st.getMaxDamage() - st.getDamage()), ax + 19, yy + 5, resolve(s, am.color, i, 4));
+                    ctx.drawText(tr, "" + (st.getMaxDamage() - st.getDamage()), 19, yy + 5, resolve(s, m.color, i, 4), s.hudShadow);
             }
+        } else {
+            int w0 = tr.getWidth(b.text) + 10;
+            if (s.hudBg) ctx.fill(0, 0, w0, 14, bg);
+            if (s.hudBar) ctx.fill(0, 0, 2, 14, resolve(s, -1, 0, 1));
+            if (s.hudOutline) outline(ctx, 0, 0, w0, 14, resolve(s, -1, 0, 1));
+            ctx.drawText(tr, b.text, 6, 3, resolve(s, m.color, idx, n), s.hudShadow);
         }
+        ctx.getMatrices().popMatrix();
     }
 
     static void key(DrawContext ctx, Config.Settings s, Config.Mod m, String label, boolean down, int x, int y, int w, int h) {
         var tr = MinecraftClient.getInstance().textRenderer;
         int col = resolve(s, m.color, 0, 1) & 0xFFFFFF;
         ctx.fill(x, y, x + w, y + h, down ? (0xD0000000 | col) : 0x80000000);
-        ctx.drawTextWithShadow(tr, label, x + (w - tr.getWidth(label)) / 2, y + (h - 8) / 2 + 1, down ? 0xFF000000 : 0xFFFFFFFF);
+        ctx.drawText(tr, label, x + (w - tr.getWidth(label)) / 2, y + (h - 8) / 2 + 1, down ? 0xFF000000 : 0xFFFFFFFF, s.hudShadow && !down);
+    }
+
+    /* ---------------- HUD ---------------- */
+
+    static void effects(DrawContext ctx, Config.Settings s, int sw, int sh) {
+        if (s.tint) {
+            int col = resolve(s, s.tintColor, 0, 1) & 0xFFFFFF;
+            ctx.fill(0, 0, sw, sh, (((int) (s.tintAlpha * 2.55f)) << 24) | col);
+        }
+        if (s.glow) {
+            int g = Math.max(2, (int) (sh * s.glowSize / 100f));
+            int c1 = resolve(s, -1, 0, 2) & 0xFFFFFF, c2 = resolve(s, -1, 1, 2) & 0xFFFFFF;
+            ctx.fillGradient(0, 0, sw, g, 0x88000000 | c1, c1);
+            ctx.fillGradient(0, sh - g, sw, sh, c2, 0x88000000 | c2);
+        }
+    }
+
+    static void hud(DrawContext ctx) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        Config.Settings s = Config.cur();
+        if (mc.options.hudHidden || mc.player == null) return;
+        if (mc.currentScreen instanceof HudEditor) return;
+        int sw = ctx.getScaledWindowWidth(), sh = ctx.getScaledWindowHeight();
+        effects(ctx, s, sw, sh);
+        if (!s.hud) return;
+        List<Box> bs = boxes(mc, s, sw, sh);
+        for (int i = 0; i < bs.size(); i++) drawBox(ctx, mc, s, bs.get(i), i, bs.size(), false);
     }
 }

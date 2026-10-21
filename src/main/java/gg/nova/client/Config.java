@@ -13,20 +13,27 @@ import java.util.*;
 public class Config {
     public static class Custom { public String name, type; public double value; }
 
-    /** One module: on/off + color code (-1 = theme gradient, -2 = rainbow, otherwise 0xRRGGBB). */
-    public static class Mod { public boolean on; public int color = -1; }
+    /** One module: on/off, color code, position (fractions of screen, -1 = auto) and scale %. */
+    public static class Mod {
+        public boolean on;
+        public int color = -1;   // -1 theme, -2 rainbow, -3 pulse, -4 wave, -5 custom, else 0xRRGGBB
+        public float fx = -1f, fy = -1f;
+        public int scale = 100;
+    }
 
     public static class Settings {
         public String theme = "Neon";
         public int accent = 0x7C5CFF, accent2 = 0x00E5FF;
-        public int bgColor = 0x000000, bgAlpha = 56, chromaSpeed = 30;
-        public boolean hud = true, showFps = true, hudBg = true;
+        public int bgColor = 0x000000, bgAlpha = 56, chromaSpeed = 30, textColor = 0xFFFFFF;
+        public boolean hud = true, showFps = true, hudBg = true, hudShadow = true, hudBar = true, hudOutline = false;
         public int hudScale = 100, corner = 0;
+        public boolean glow = false, tint = false;
+        public int glowSize = 12, tintAlpha = 12, tintColor = -1;
         public String boost = "Off";
         public boolean entityCull = true;
-        public int cullDist = 64;       // blocks
-        public int unfocusedFps = 15;   // unused (feature removed)
-        public int zoomFov = 30;
+        public int cullDist = 64;
+        public int unfocusedFps = 15;   // unused
+        public int zoomFov = 30, fov = 90, viewDist = 12;
         public Map<String, Mod> mods = new LinkedHashMap<>();
         public List<Custom> custom = new ArrayList<>();
 
