@@ -39,6 +39,7 @@ public class NovaClient implements ClientModInitializer {
     public static int nextColor(int code) { return PC[(idxOf(code) + 1) % PC.length]; }
     public static int prevColor(int code) { return PC[(idxOf(code) + PC.length - 1) % PC.length]; }
 
+    static final java.util.HashMap<String, String> DISP = new java.util.HashMap<>();
     static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
     static final ArrayDeque<Long> clicksL = new ArrayDeque<>(), clicksR = new ArrayDeque<>();
     static boolean wasL, wasR;
@@ -65,6 +66,8 @@ public class NovaClient implements ClientModInitializer {
         while (menuKey.wasPressed()) mc.setScreen(new NovaScreen(mc.currentScreen));
         Config.Settings s = Config.cur();
         if (mc.options != null && ++tickN % 10 == 0) RenderMods.sync(s);
+        if (tickN % 5 == 0) DISP.clear();          // HUD text is rebuilt 4x per second, not every frame
+        Adaptive.tick(mc, s);
         var fov = mc.options.getFov();
         if (mc.player == null) {
             if (savedFov >= 0) { fov.setValue(savedFov); savedFov = -1; }
@@ -196,7 +199,7 @@ public class NovaClient implements ClientModInitializer {
             b.sc = base * m.scale / 100f;
             if (n.equals("Armor")) { b.w = Math.round(56 * b.sc); b.h = Math.round(72 * b.sc); }
             else if (n.equals("Keys")) { b.w = Math.round(60 * b.sc); b.h = Math.round(72 * b.sc); }
-            else { b.text = display(mc, s, n); b.w = Math.round((tr.getWidth(b.text) + 10) * b.sc); b.h = Math.round(14 * b.sc); }
+            else { String dd = DISP.get(n); if (dd == null) { dd = display(mc, s, n); DISP.put(n, dd); } b.text = dd; b.w = Math.round((tr.getWidth(b.text) + 10) * b.sc); b.h = Math.round(14 * b.sc); }
             out.add(b);
         }
         int top = 4, bottom = 4;
@@ -218,6 +221,17 @@ public class NovaClient implements ClientModInitializer {
 
     /** Filled rounded rectangle (no overlapping fills, so translucent colors stay even). */
     static void rbox(DrawContext c, int x, int y, int w, int h, int r, int col) {
+        if (Config.cur().guiClassic) {            // classic: square, bevelled like old Minecraft buttons
+            c.fill(x, y, x + w, y + h, col);
+            if (((col >>> 24) & 255) >= 0xF0 && h >= 8) {
+                int lt = 0xFF000000 | lerp(col, 0xFFFFFF, 0.2f), dk = 0xFF000000 | lerp(col, 0x000000, 0.4f);
+                c.fill(x, y, x + w, y + 1, lt);
+                c.fill(x, y, x + 1, y + h, lt);
+                c.fill(x, y + h - 1, x + w, y + h, dk);
+                c.fill(x + w - 1, y, x + w, y + h, dk);
+            }
+            return;
+        }
         r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
         for (int i = 0; i < r; i++) {
             double dy = r - i - 0.5;

@@ -12,9 +12,10 @@ public class Boost {
         GameOptions o = MinecraftClient.getInstance().options;
         if (mode.equals("Off")) { restore(o); return; }
         if (Config.I.backup.isEmpty()) snapshot(o);
-        boolean max = mode.equals("Max");
-        o.getViewDistance().setValue(max ? 6 : 10);
-        o.getSimulationDistance().setValue(max ? 5 : 8);
+        boolean extreme = mode.equals("Extreme");
+        boolean max = mode.equals("Max") || extreme;
+        o.getViewDistance().setValue(extreme ? 4 : max ? 6 : 10);
+        o.getSimulationDistance().setValue(extreme ? 4 : max ? 5 : 8);
         o.getEntityDistanceScaling().setValue(max ? 0.5 : 0.75);
         setEnum(o.getParticles(), max ? "MINIMAL" : "DECREASED");
         setEnum(o.getCloudRenderMode(), max ? "OFF" : "FAST");

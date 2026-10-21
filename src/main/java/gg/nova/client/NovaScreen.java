@@ -26,7 +26,7 @@ public class NovaScreen extends Screen {
     static final String[] SUBS = {"HUD, style and screen effects", "Switch modules on and tune them", "Colors and gradients",
             "FPS boost and video options", "Save and switch setups", "Your own settings"};
     static final String[] CORNERS = {"Top left", "Top right", "Bottom left", "Bottom right"};
-    static final String[] BOOST = {"Off", "Balanced", "Max"};
+    static final String[] BOOST = {"Off", "Balanced", "Max", "Extreme"};
     static final String[] MODES = {"Inherit", "On", "Off"};
     static final Object[][] THEMES = {
             {"Neon", 0x7C5CFF, 0x00E5FF}, {"Ember", 0xFF6A3D, 0xFFC857}, {"Forest", 0x3DDC97, 0xB6F09C}, {"Ocean", 0x2F8CFF, 0x5EF2D6},
@@ -43,8 +43,8 @@ public class NovaScreen extends Screen {
             {"11111111", "00011000", "00000000", "11111111", "11000000", "00000000", "11111111", "00001100"}};
 
     static final int ROW = 26;
-    static final int TXT = 0xFFE8EBF7, MUT = 0xFF8B91AB, DIM = 0xFF5E647D;
-    static final int ROWBG = 0xFF131726, ROWHOV = 0xFF1A2034, CARD = 0xFF161A2A, CARDHOV = 0xFF1D2338, TRACK = 0xFF2A3047;
+    int TXT, MUT, DIM, ROWBG, ROWHOV, CARD, CARDHOV, TRACK, CHIP, CHIPHOV, INPUT;
+    boolean classic;
 
     static int tab = 0, scroll = 0;
     static String page = null;
@@ -98,6 +98,19 @@ public class NovaScreen extends Screen {
         return f;
     }
 
+    void applyStyle() {
+        classic = s.guiClassic;
+        if (classic) {
+            TXT = 0xFFFFFFFF; MUT = 0xFFB0B0B0; DIM = 0xFF8A8A8A;
+            ROWBG = 0xFF3A3A3A; ROWHOV = 0xFF484848; CARD = 0xFF444444; CARDHOV = 0xFF525252; TRACK = 0xFF1C1C1C;
+            CHIP = 0xFF555555; CHIPHOV = 0xFF6A6A6A; INPUT = 0xFF111111;
+        } else {
+            TXT = 0xFFE8EBF7; MUT = 0xFF8B91AB; DIM = 0xFF5E647D;
+            ROWBG = 0xFF131726; ROWHOV = 0xFF1A2034; CARD = 0xFF161A2A; CARDHOV = 0xFF1D2338; TRACK = 0xFF2A3047;
+            CHIP = 0xFF222842; CHIPHOV = mix(0x262C45, s.accent, 0.25f); INPUT = 0xFF0C0F1A;
+        }
+    }
+
     void reset() { Arrays.fill(seen, false); labelFor = ""; }
     void later(Runnable r) { pending = r; }
 
@@ -108,7 +121,7 @@ public class NovaScreen extends Screen {
     int acc2() { return 0xFF000000 | s.accent2; }
     int mix(int a, int b, float t) { return 0xFF000000 | NovaClient.lerp(a, b, t); }
     int tw(String t) { return textRenderer.getWidth(t); }
-    void text(String t, int x, int y, int col) { ctx.drawText(textRenderer, t, x, y, col, false); }
+    void text(String t, int x, int y, int col) { ctx.drawText(textRenderer, t, x, y, col, classic); }
     void rbox(int x, int y, int w, int h, int r, int col) { NovaClient.rbox(ctx, x, y, w, h, r, col); }
     String fit(String t, int w) { return tw(t) <= w ? t : textRenderer.trimToWidth(t, Math.max(0, w - 8)) + ".."; }
 
@@ -158,11 +171,17 @@ public class NovaScreen extends Screen {
         double t = Math.max(0, Math.min(1, (cur - min) / (max - min)));
         int fx = tx + (int) (trackW * t);
         boolean hot = dragId == id || in(fx - 8, y + 4, 16, 18);
-        rbox(tx, y + 11, trackW, 4, 2, TRACK);
-        for (int g = 0; g < fx - tx; g += 2)
-            ctx.fill(tx + g, y + 11, Math.min(fx, tx + g + 2), y + 15, mix(s.accent, s.accent2, g / (float) Math.max(1, trackW)));
-        if (hot) rbox(fx - 7, y + 6, 14, 14, 7, 0x30000000 | s.accent);
-        rbox(fx - 5, y + 8, 10, 10, 5, 0xFFFFFFFF);
+        if (classic) {
+            ctx.fill(tx, y + 10, tx + trackW, y + 16, TRACK);
+            ctx.fill(tx, y + 10, fx, y + 16, acc());
+            rbox(fx - 4, y + 5, 8, 16, 0, hot ? 0xFFE0E0E0 : 0xFFC6C6C6);
+        } else {
+            rbox(tx, y + 11, trackW, 4, 2, TRACK);
+            for (int g = 0; g < fx - tx; g += 2)
+                ctx.fill(tx + g, y + 11, Math.min(fx, tx + g + 2), y + 15, mix(s.accent, s.accent2, g / (float) Math.max(1, trackW)));
+            if (hot) rbox(fx - 7, y + 6, 14, 14, 7, 0x30000000 | s.accent);
+            rbox(fx - 5, y + 8, 10, 10, 5, 0xFFFFFFFF);
+        }
         String v = fmt != null ? fmt.apply((int) Math.round(cur)) : "" + (int) Math.round(cur);
         text(v, x2 - tw(v), y + 9, TXT);
     }
@@ -171,7 +190,7 @@ public class NovaScreen extends Screen {
     int chipCtl(int y, int xRight, String t, int swatch, Runnable l, Runnable r) {
         int w = tw(t) + 18 + (swatch != 0 ? 12 : 0), x = xRight - w;
         boolean hov = in(x, y + 3, w, ROW - 6);
-        rbox(x, y + 3, w, ROW - 6, 5, hov ? mix(0x262C45, s.accent, 0.25f) : 0xFF222842);
+        rbox(x, y + 3, w, ROW - 6, 5, hov ? CHIPHOV : CHIP);
         int tx = x + 9;
         if (swatch != 0) { rbox(x + 7, y + 9, 8, 8, 3, swatch); tx = x + 21; }
         text(t, tx, y + 9, TXT);
@@ -181,6 +200,12 @@ public class NovaScreen extends Screen {
     }
 
     void drawSwitch(int id, int x, int y, boolean on) {
+        if (classic) {
+            rbox(x, y, 30, 14, 0, on ? 0xFF2E6B2E : 0xFF6B2E2E);
+            String lbl = on ? "ON" : "OFF";
+            text(lbl, x + (30 - tw(lbl)) / 2, y + 3, on ? 0xFF7CFF7C : 0xFFFF8080);
+            return;
+        }
         float target = on ? 1f : 0f;
         if (!seen[id]) { anim[id] = target; seen[id] = true; }
         anim[id] += (target - anim[id]) * 0.35f;
@@ -241,7 +266,7 @@ public class NovaScreen extends Screen {
         int y = cy; cy += ROW;
         if (y < top || y + ROW > bottom) return;
         boolean hov = in(cx, y + 1, cw, ROW - 2);
-        rbox(cx, y + 1, cw, ROW - 2, 5, hov ? mix(0x1A2034, s.accent, 0.3f) : CARD);
+        rbox(cx, y + 1, cw, ROW - 2, 5, hov ? CHIPHOV : CARD);
         if (hov) rbox(cx, y + 6, 3, ROW - 12, 1, acc());
         text(t, cx + (cw - tw(t)) / 2, y + 9, TXT);
         if (hov && pressL) { a.run(); pressL = false; }
@@ -257,7 +282,7 @@ public class NovaScreen extends Screen {
         int x = cx + 12;
         if (label != null) { text(label, x, y + 9, TXT); x += tw(label) + 10; }
         int w = Math.max(50, right - x);
-        rbox(x, y + 3, w, ROW - 6, 5, 0xFF0C0F1A);
+        rbox(x, y + 3, w, ROW - 6, 5, INPUT);
         f.setX(x + 7); f.setY(y + 4); f.setWidth(w - 10);
         f.visible = true; f.active = true;
     }
@@ -272,8 +297,8 @@ public class NovaScreen extends Screen {
     void card(int x, int y, int w, int id, String title, int stripe, boolean on, Consumer<Boolean> st, Runnable alt, String sub, Ctl bottomCtl) {
         int ct = y + 2, h = 2 * ROW - 4;
         boolean hov = in(x, ct, w, h);
-        if (on) rbox(x - 1, ct - 1, w + 2, h + 2, 7, 0x44000000 | s.accent);
-        rbox(x, ct, w, h, 6, on ? mix(0x161A2A, s.accent, 0.14f) : (hov ? CARDHOV : CARD));
+        if (on) rbox(x - 1, ct - 1, w + 2, h + 2, 7, classic ? acc() : (0x44000000 | s.accent));
+        rbox(x, ct, w, h, 6, on ? mix(CARD, s.accent, classic ? 0.3f : 0.14f) : (hov ? CARDHOV : CARD));
         if (stripe != 0) rbox(x + 1, ct + 7, 3, h - 14, 1, stripe);
         if (bottomCtl != null) bottomCtl.draw(ct + 22, x + 12, x + w - 10);
         else if (sub != null) text(fit(sub, w - 26), x + 12, ct + 28, MUT);
@@ -288,6 +313,8 @@ public class NovaScreen extends Screen {
     /* ---------- pages ---------- */
 
     void visuals() {
+        header("Menu");
+        chipRow("Menu style", classic ? "Classic" : "Modern", 0, () -> s.guiClassic = !s.guiClassic, () -> s.guiClassic = !s.guiClassic);
         header("HUD");
         toggleRow("HUD overlay", () -> s.hud, v -> s.hud = v);
         toggleRow("HUD background", () -> s.hudBg, v -> s.hudBg = v);
@@ -385,7 +412,7 @@ public class NovaScreen extends Screen {
                 Object[] t = THEMES[i];
                 int x = cx + k * (bw + 6);
                 boolean hov = in(x, y + 1, bw, ROW - 2), sel = s.theme.equals(t[0]);
-                if (sel) rbox(x - 1, y, bw + 2, ROW, 6, 0x60000000 | s.accent);
+                if (sel) rbox(x - 1, y, bw + 2, ROW, 6, classic ? acc() : (0x60000000 | s.accent));
                 rbox(x, y + 1, bw, ROW - 2, 5, hov ? CARDHOV : CARD);
                 for (int g = 0; g < bw - 8; g += 2)
                     ctx.fill(x + 4 + g, y + ROW - 7, x + 6 + g, y + ROW - 4, 0xFF000000 | NovaClient.lerp((int) t[1], (int) t[2], g / (float) (bw - 8)));
@@ -409,10 +436,16 @@ public class NovaScreen extends Screen {
 
     void renderTab() {
         header("FPS boost");
-        chipRow("Preset", s.boost, 0, () -> boost(1), () -> boost(2));
+        chipRow("Preset", s.boost, 0, () -> boost(1), () -> boost(BOOST.length - 1));
         toggleRow("Entity culling", () -> s.entityCull, v -> s.entityCull = v);
         sliderRow("Cull distance", 16, 128, () -> s.cullDist, v -> s.cullDist = v.intValue(), i -> i + " blocks");
         note("A preset edits your video settings; Off restores them.");
+        header("Adaptive render distance");
+        toggleRow("Auto-adjust render distance", () -> s.adaptOn, v -> s.adaptOn = v);
+        sliderRow("Target FPS", 30, 360, () -> s.adaptTarget, v -> s.adaptTarget = v.intValue(), null);
+        sliderRow("Minimum distance", 2, 32, () -> s.adaptMin, v -> s.adaptMin = v.intValue(), i -> i + " chunks");
+        sliderRow("Maximum distance", 2, 32, () -> s.adaptMax, v -> s.adaptMax = v.intValue(), i -> i + " chunks");
+        note("Lowers distance when FPS dips, raises it with headroom.");
         header("Render modules");
         int cardW = cw / 2 - 4, rowY = 0;
         for (int i = 0; i < RenderMods.NAMES.length; i++) {
@@ -438,7 +471,7 @@ public class NovaScreen extends Screen {
     }
 
     void boost(int dir) {
-        s.boost = BOOST[(Arrays.asList(BOOST).indexOf(s.boost) + dir) % 3];
+        s.boost = BOOST[(Arrays.asList(BOOST).indexOf(s.boost) + dir) % BOOST.length];
         Boost.apply(s.boost);
         Config.save();
     }
@@ -520,7 +553,7 @@ public class NovaScreen extends Screen {
         if (primary) {
             rbox(x, y, w, 22, 6, hov ? mix(s.accent, 0xFFFFFF, 0.2f) : acc());
         } else {
-            rbox(x, y, w, 22, 6, hov ? mix(0x262C45, s.accent, 0.25f) : 0xFF222842);
+            rbox(x, y, w, 22, 6, hov ? CHIPHOV : CHIP);
         }
         text(t, x + (w - tw(t)) / 2, y + 7, primary ? 0xFF0E1018 : TXT);
         if (hov && pressL) { pressL = false; return true; }
@@ -531,6 +564,7 @@ public class NovaScreen extends Screen {
     public void render(DrawContext c, int mouseX, int mouseY, float d) {
         ctx = c;
         s = Config.cur();
+        applyStyle();
         mx = mouseX; my = mouseY;
         long win = GLFW.glfwGetCurrentContext();
         boolean l = GLFW.glfwGetMouseButton(win, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
@@ -541,28 +575,43 @@ public class NovaScreen extends Screen {
         renderBackground(c, mouseX, mouseY, d);
 
         // glow + glass panel
-        for (int k = 9; k >= 1; k--) rbox(px - k, py - k, W + 2 * k, H + 2 * k, 9 + k, 0x08000000 | s.accent);
-        rbox(px, py, W, H, 9, 0xF00D1019);
-        rbox(px + 6, py + 6, 112, H - 12, 7, 0xFF090B12);
-        for (int i = 8; i < W - 8; i += 3)
-            ctx.fill(px + i, py + 1, Math.min(px + W - 8, px + i + 3), py + 3, mix(s.accent, s.accent2, i / (float) W));
+        if (!classic) for (int k = 9; k >= 1; k--) rbox(px - k, py - k, W + 2 * k, H + 2 * k, 9 + k, 0x08000000 | s.accent);
+        if (classic) {
+            rbox(px, py, W, H, 0, 0xFF2B2B2B);
+            for (int gx = px + 1; gx < px + W - 1; gx += 8)          // faint stone texture
+                for (int gy = py + 1; gy < py + H - 1; gy += 8) {
+                    int hsh = (((gx * 73856093) ^ (gy * 19349663)) >>> 3) & 3;
+                    if (hsh > 1) continue;
+                    ctx.fill(gx, gy, Math.min(gx + 8, px + W - 1), Math.min(gy + 8, py + H - 1), hsh == 0 ? 0x16000000 : 0x0CFFFFFF);
+                }
+            rbox(px + 6, py + 6, 112, H - 12, 0, 0xFF202020);
+        } else {
+            rbox(px, py, W, H, 9, 0xF00D1019);
+            rbox(px + 6, py + 6, 112, H - 12, 7, 0xFF090B12);
+            for (int i = 8; i < W - 8; i += 3)
+                ctx.fill(px + i, py + 1, Math.min(px + W - 8, px + i + 3), py + 3, mix(s.accent, s.accent2, i / (float) W));
+        }
 
         // logo
-        String logo = "NOVA";
-        int lx = px + 20;
-        for (int i = 0; i < logo.length(); i++) {
-            String ch = "" + logo.charAt(i);
-            big(ch, lx, py + 15, 1.6f, mix(s.accent, s.accent2, i / 3f));
-            lx += (int) (tw(ch) * 1.6f) + 2;
+        if (classic) {
+            text("NOVA CLIENT", px + 16, py + 20, 0xFFFFFFFF);
+        } else {
+            String logo = "NOVA";
+            int lx = px + 20;
+            for (int i = 0; i < logo.length(); i++) {
+                String ch = "" + logo.charAt(i);
+                big(ch, lx, py + 15, 1.6f, mix(s.accent, s.accent2, i / 3f));
+                lx += (int) (tw(ch) * 1.6f) + 2;
+            }
+            text("CLIENT", px + 21, py + 31, MUT);
         }
-        text("CLIENT", px + 21, py + 31, MUT);
 
         // tabs with sliding highlight
         int th = Math.max(20, Math.min(28, (H - 118) / TABS.length));
         int tabTop = py + 50;
         float target = tabTop + tab * (th + 3);
         tabY = tabY < 0 ? target : tabY + (target - tabY) * 0.3f;
-        rbox(px + 12, (int) tabY, 104, th, 6, 0x34000000 | s.accent);
+        rbox(px + 12, (int) tabY, 104, th, 6, classic ? CHIPHOV : (0x34000000 | s.accent));
         rbox(px + 12, (int) tabY + 5, 3, th - 10, 1, acc());
         for (int i = 0; i < TABS.length; i++) {
             int y = tabTop + i * (th + 3);

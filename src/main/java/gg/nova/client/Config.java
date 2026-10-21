@@ -38,6 +38,9 @@ public class Config {
         public int cullDist = 64;
         public int unfocusedFps = 15;   // unused
         public int zoomFov = 30, fov = 90, viewDist = 12;
+        public boolean guiClassic = true;   // menu style: classic (old Minecraft look) or modern
+        public boolean adaptOn = false;
+        public int adaptTarget = 120, adaptMin = 5, adaptMax = 16;
         public Map<String, Mod> mods = new LinkedHashMap<>();
         public List<Custom> custom = new ArrayList<>();
 

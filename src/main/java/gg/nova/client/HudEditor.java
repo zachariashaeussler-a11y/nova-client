@@ -24,7 +24,8 @@ public class HudEditor extends Screen {
     boolean button(DrawContext c, Config.Settings s, int mx, int my, boolean press, int x, int y, int w, String t, boolean primary) {
         boolean hov = mx >= x && mx < x + w && my >= y && my < y + 20;
         int bg = primary ? (hov ? 0xFF000000 | NovaClient.lerp(s.accent, 0xFFFFFF, 0.2f) : 0xFF000000 | s.accent)
-                : (hov ? 0xFF000000 | NovaClient.lerp(0x262C45, s.accent, 0.25f) : 0xFF222842);
+                : (s.guiClassic ? (hov ? 0xFF6A6A6A : 0xFF555555)
+                : (hov ? 0xFF000000 | NovaClient.lerp(0x262C45, s.accent, 0.25f) : 0xFF222842));
         NovaClient.rbox(c, x, y, w, 20, 5, bg);
         c.drawText(textRenderer, t, x + (w - textRenderer.getWidth(t)) / 2, y + 6, primary ? 0xFF0E1018 : 0xFFE8EBF7, false);
         return hov && press;
@@ -43,8 +44,8 @@ public class HudEditor extends Screen {
 
         // bottom bar
         int bx = width / 2 - 190, by = height - 40;
-        for (int k = 6; k >= 1; k--) NovaClient.rbox(c, bx - k, by - k, 380 + 2 * k, 32 + 2 * k, 9 + k, 0x08000000 | s.accent);
-        NovaClient.rbox(c, bx, by, 380, 32, 9, 0xF00D1019);
+        if (!s.guiClassic) for (int k = 6; k >= 1; k--) NovaClient.rbox(c, bx - k, by - k, 380 + 2 * k, 32 + 2 * k, 9 + k, 0x08000000 | s.accent);
+        NovaClient.rbox(c, bx, by, 380, 32, 9, s.guiClassic ? 0xFF2B2B2B : 0xF00D1019);
         boolean barHit = false;
         if (button(c, s, mx, my, press, bx + 8, by + 6, 80, "Done", true)) { barHit = true; later = true; }
         if (button(c, s, mx, my, press, bx + 94, by + 6, 104, "Reset layout", false)) {
