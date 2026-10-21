@@ -271,6 +271,11 @@ public class NovaScreen extends Screen {
     }
 
     static Text txt(String l, boolean on) { return Text.literal(l + ": " + (on ? "ON" : "OFF")); }
+        static boolean hasShiftDown() {
+        long w = org.lwjgl.glfw.GLFW.glfwGetCurrentContext();
+        return org.lwjgl.glfw.GLFW.glfwGetKey(w, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_SHIFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS
+                || org.lwjgl.glfw.GLFW.glfwGetKey(w, org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_SHIFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
+    }
 
     void slider(String label, int x, int y, int w, double min, double max, double cur, Consumer<Double> set) {
         addDrawableChild(new Slider(x, y, w, label, min, max, cur, set));
