@@ -19,6 +19,10 @@ public class Config {
         public int color = -1;   // -1 theme, -2 rainbow, -3 pulse, -4 wave, -5 custom, else 0xRRGGBB
         public float fx = -1f, fy = -1f;
         public int scale = 100;
+        public int rgb = 0xFFFFFF;            // used when color = "Own"
+        public String label = "";             // custom label text ("" = default)
+        public int bgMode = 0, shadowMode = 0, barMode = 0, outlineMode = 0; // 0 inherit, 1 on, 2 off
+        public int val = -1;                  // render-module value (-1 = default)
     }
 
     public static class Settings {

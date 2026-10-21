@@ -29,9 +29,9 @@ public class NovaClient implements ClientModInitializer {
     public static final String[] MODS = {"FPS", "Coords", "CPS", "Ping", "Direction", "Speed", "Memory", "Clock", "Watermark", "Armor", "Keys", "Sprint", "Zoom"};
 
     /** Color choices: negative codes are special modes. */
-    static final String[] PN = {"Theme", "Rainbow", "Pulse", "Wave", "Custom", "White", "Red", "Orange", "Gold", "Yellow", "Lime", "Green", "Mint",
+    static final String[] PN = {"Theme", "Rainbow", "Pulse", "Wave", "Custom", "Own", "White", "Red", "Orange", "Gold", "Yellow", "Lime", "Green", "Mint",
             "Teal", "Cyan", "Sky", "Blue", "Indigo", "Purple", "Magenta", "Pink", "Coral", "Peach", "Silver", "Gray", "Black"};
-    static final int[] PC = {-1, -2, -3, -4, -5, 0xFFFFFF, 0xFF4D4D, 0xFF9F43, 0xFFD700, 0xFFE066, 0xA6E22E, 0x3DDC97, 0x98FFC8,
+    static final int[] PC = {-1, -2, -3, -4, -5, -6, 0xFFFFFF, 0xFF4D4D, 0xFF9F43, 0xFFD700, 0xFFE066, 0xA6E22E, 0x3DDC97, 0x98FFC8,
             0x14B8A6, 0x00E5FF, 0x87CEEB, 0x2F8CFF, 0x4B5BD8, 0x7C5CFF, 0xFF00FF, 0xFF4D8D, 0xFF7F50, 0xFFDAB9, 0xC0C0C0, 0x808080, 0x000000};
 
     static int idxOf(int code) { for (int i = 0; i < PC.length; i++) if (PC[i] == code) return i; return 0; }
@@ -112,9 +112,16 @@ public class NovaClient implements ClientModInitializer {
         if (code == -3) return 0xFF000000 | lerp(s.accent, s.accent2, (float) (0.5 + 0.5 * Math.sin(t / 400.0 * s.chromaSpeed / 30.0)));
         if (code == -4) return 0xFF000000 | lerp(s.accent, s.accent2, (float) (0.5 + 0.5 * Math.sin(t / 600.0 * s.chromaSpeed / 30.0 + i * 0.9)));
         if (code == -5) return 0xFF000000 | s.textColor;
+        if (code == -6) return 0xFFFFFFFF;
         if (code == -1) return 0xFF000000 | lerp(s.accent, s.accent2, n <= 1 ? 0f : i / (float) (n - 1));
         return 0xFF000000 | code;
     }
+
+    static int resolveM(Config.Settings s, Config.Mod m, int i, int n) {
+        return m.color == -6 ? (0xFF000000 | m.rgb) : resolve(s, m.color, i, n);
+    }
+
+    static boolean flag(int mode, boolean global) { return mode == 1 || (mode == 0 && global); }
 
     static int lerp(int a, int b, float t) {
         int r = (int) (((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
@@ -142,23 +149,38 @@ public class NovaClient implements ClientModInitializer {
 
     public static class Box { public String name, text = ""; public int x, y, w, h; public float sc; }
 
-    static String text(MinecraftClient mc, String n) {
+    public static String defaultLabel(String n) {
+        return switch (n) {
+            case "FPS" -> "FPS"; case "Coords" -> "XYZ"; case "CPS" -> "CPS"; case "Ping" -> "Ping";
+            case "Direction" -> "Facing"; case "Memory" -> "RAM"; case "Watermark" -> "NOVA";
+            default -> "";
+        };
+    }
+
+    static String value(MinecraftClient mc, String n) {
         var p = mc.player;
         return switch (n) {
-            case "FPS" -> "FPS " + mc.getCurrentFps();
-            case "Coords" -> "XYZ " + (int) Math.floor(p.getX()) + " " + (int) Math.floor(p.getY()) + " " + (int) Math.floor(p.getZ());
-            case "CPS" -> "CPS " + clicksL.size() + " | " + clicksR.size();
-            case "Ping" -> "Ping " + ping + " ms";
-            case "Direction" -> "Facing " + p.getHorizontalFacing().name();
+            case "FPS" -> "" + mc.getCurrentFps();
+            case "Coords" -> p == null ? "0 0 0" : (int) Math.floor(p.getX()) + " " + (int) Math.floor(p.getY()) + " " + (int) Math.floor(p.getZ());
+            case "CPS" -> clicksL.size() + " | " + clicksR.size();
+            case "Ping" -> ping + " ms";
+            case "Direction" -> p == null ? "NORTH" : p.getHorizontalFacing().name();
             case "Speed" -> String.format(Locale.ROOT, "%.1f b/s", speed);
             case "Memory" -> {
                 Runtime rt = Runtime.getRuntime();
-                yield "RAM " + ((rt.totalMemory() - rt.freeMemory()) >> 20) + "/" + (rt.maxMemory() >> 20) + " MB";
+                yield ((rt.totalMemory() - rt.freeMemory()) >> 20) + "/" + (rt.maxMemory() >> 20) + " MB";
             }
             case "Clock" -> LocalTime.now().format(CLOCK);
-            case "Watermark" -> "NOVA Client | " + Config.I.active;
+            case "Watermark" -> Config.I.active;
             default -> "";
         };
+    }
+
+    static String display(MinecraftClient mc, Config.Settings s, String n) {
+        Config.Mod m = s.mod(n);
+        String lab = (m.label == null || m.label.isEmpty()) ? defaultLabel(n) : m.label;
+        String v = value(mc, n);
+        return lab.isEmpty() ? v : lab + " " + v;
     }
 
     /** Enabled HUD modules with their on-screen position and size. Unmoved modules are auto-placed. */
@@ -174,7 +196,7 @@ public class NovaClient implements ClientModInitializer {
             b.sc = base * m.scale / 100f;
             if (n.equals("Armor")) { b.w = Math.round(56 * b.sc); b.h = Math.round(72 * b.sc); }
             else if (n.equals("Keys")) { b.w = Math.round(60 * b.sc); b.h = Math.round(72 * b.sc); }
-            else { b.text = text(mc, n); b.w = Math.round((tr.getWidth(b.text) + 10) * b.sc); b.h = Math.round(14 * b.sc); }
+            else { b.text = display(mc, s, n); b.w = Math.round((tr.getWidth(b.text) + 10) * b.sc); b.h = Math.round(14 * b.sc); }
             out.add(b);
         }
         int top = 4, bottom = 4;
@@ -208,6 +230,7 @@ public class NovaClient implements ClientModInitializer {
         ctx.getMatrices().pushMatrix();
         ctx.getMatrices().translate((float) b.x, (float) b.y);
         ctx.getMatrices().scale(b.sc, b.sc);
+        boolean sh = flag(m.shadowMode, s.hudShadow);
         if (b.name.equals("Keys")) {
             var o = mc.options;
             key(ctx, s, m, "W", o.forwardKey.isPressed(), 20, 0, 18, 18);
@@ -220,7 +243,7 @@ public class NovaClient implements ClientModInitializer {
         } else if (b.name.equals("Armor")) {
             EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
             for (int i = 0; i < 4; i++) {
-                ItemStack st = mc.player.getEquippedStack(slots[i]);
+                ItemStack st = mc.player == null ? ItemStack.EMPTY : mc.player.getEquippedStack(slots[i]);
                 int yy = i * 18;
                 if (st.isEmpty()) {
                     if (preview) ctx.fill(1, yy + 1, 15, yy + 15, 0x40FFFFFF);
@@ -228,23 +251,23 @@ public class NovaClient implements ClientModInitializer {
                 }
                 ctx.drawItem(st, 0, yy);
                 if (st.isDamageable())
-                    ctx.drawText(tr, "" + (st.getMaxDamage() - st.getDamage()), 19, yy + 5, resolve(s, m.color, i, 4), s.hudShadow);
+                    ctx.drawText(tr, "" + (st.getMaxDamage() - st.getDamage()), 19, yy + 5, resolveM(s, m, i, 4), sh);
             }
         } else {
             int w0 = tr.getWidth(b.text) + 10;
-            if (s.hudBg) ctx.fill(0, 0, w0, 14, bg);
-            if (s.hudBar) ctx.fill(0, 0, 2, 14, resolve(s, -1, 0, 1));
-            if (s.hudOutline) outline(ctx, 0, 0, w0, 14, resolve(s, -1, 0, 1));
-            ctx.drawText(tr, b.text, 6, 3, resolve(s, m.color, idx, n), s.hudShadow);
+            if (flag(m.bgMode, s.hudBg)) ctx.fill(0, 0, w0, 14, bg);
+            if (flag(m.barMode, s.hudBar)) ctx.fill(0, 0, 2, 14, resolve(s, -1, 0, 1));
+            if (flag(m.outlineMode, s.hudOutline)) outline(ctx, 0, 0, w0, 14, resolve(s, -1, 0, 1));
+            ctx.drawText(tr, b.text, 6, 3, resolveM(s, m, idx, n), sh);
         }
         ctx.getMatrices().popMatrix();
     }
 
     static void key(DrawContext ctx, Config.Settings s, Config.Mod m, String label, boolean down, int x, int y, int w, int h) {
         var tr = MinecraftClient.getInstance().textRenderer;
-        int col = resolve(s, m.color, 0, 1) & 0xFFFFFF;
+        int col = resolveM(s, m, 0, 1) & 0xFFFFFF;
         ctx.fill(x, y, x + w, y + h, down ? (0xD0000000 | col) : 0x80000000);
-        ctx.drawText(tr, label, x + (w - tr.getWidth(label)) / 2, y + (h - 8) / 2 + 1, down ? 0xFF000000 : 0xFFFFFFFF, s.hudShadow && !down);
+        ctx.drawText(tr, label, x + (w - tr.getWidth(label)) / 2, y + (h - 8) / 2 + 1, down ? 0xFF000000 : 0xFFFFFFFF, flag(m.shadowMode, s.hudShadow) && !down);
     }
 
     /* ---------------- HUD ---------------- */
