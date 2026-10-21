@@ -436,6 +436,15 @@ public class NovaScreen extends Screen {
 
     void renderTab() {
         header("FPS boost");
+        buttonRow("Restore my video settings (turn everything off)", () -> {
+            s.boost = "Off";
+            Boost.apply("Off");
+            for (String n : RenderMods.NAMES) s.mod(n).on = false;
+            s.adaptOn = false;
+            RenderMods.sync(s);
+            Adaptive.tick(client, s);
+            Config.save();
+        });
         chipRow("Preset", s.boost, 0, () -> boost(1), () -> boost(BOOST.length - 1));
         toggleRow("Entity culling", () -> s.entityCull, v -> s.entityCull = v);
         sliderRow("Cull distance", 16, 128, () -> s.cullDist, v -> s.cullDist = v.intValue(), i -> i + " blocks");
@@ -444,8 +453,7 @@ public class NovaScreen extends Screen {
         toggleRow("Auto-adjust render distance", () -> s.adaptOn, v -> s.adaptOn = v);
         sliderRow("Target FPS", 30, 360, () -> s.adaptTarget, v -> s.adaptTarget = v.intValue(), null);
         sliderRow("Minimum distance", 2, 32, () -> s.adaptMin, v -> s.adaptMin = v.intValue(), i -> i + " chunks");
-        sliderRow("Maximum distance", 2, 32, () -> s.adaptMax, v -> s.adaptMax = v.intValue(), i -> i + " chunks");
-        note("Lowers distance when FPS dips, raises it with headroom.");
+        note("Only lowers below your own distance, never above it."); 
         header("Render modules");
         int cardW = cw / 2 - 4, rowY = 0;
         for (int i = 0; i < RenderMods.NAMES.length; i++) {
@@ -578,11 +586,11 @@ public class NovaScreen extends Screen {
         if (!classic) for (int k = 9; k >= 1; k--) rbox(px - k, py - k, W + 2 * k, H + 2 * k, 9 + k, 0x08000000 | s.accent);
         if (classic) {
             rbox(px, py, W, H, 0, 0xFF2B2B2B);
-            for (int gx = px + 1; gx < px + W - 1; gx += 8)          // faint stone texture
-                for (int gy = py + 1; gy < py + H - 1; gy += 8) {
+            for (int gx = px + 1; gx < px + W - 1; gx += 16)          // faint stone texture
+                for (int gy = py + 1; gy < py + H - 1; gy += 16) {
                     int hsh = (((gx * 73856093) ^ (gy * 19349663)) >>> 3) & 3;
                     if (hsh > 1) continue;
-                    ctx.fill(gx, gy, Math.min(gx + 8, px + W - 1), Math.min(gy + 8, py + H - 1), hsh == 0 ? 0x16000000 : 0x0CFFFFFF);
+                    ctx.fill(gx, gy, Math.min(gx + 16, px + W - 1), Math.min(gy + 16, py + H - 1), hsh == 0 ? 0x16000000 : 0x0CFFFFFF);
                 }
             rbox(px + 6, py + 6, 112, H - 12, 0, 0xFF202020);
         } else {

@@ -46,6 +46,8 @@ public class NovaClient implements ClientModInitializer {
     static double speed, lx, lz;
     static int ping, tickN;
     public static int savedFov = -1;
+    public static boolean cullOn;
+    public static double cullSq;
 
     @Override
     @SuppressWarnings("deprecation")
@@ -65,6 +67,8 @@ public class NovaClient implements ClientModInitializer {
     static void tick(MinecraftClient mc) {
         while (menuKey.wasPressed()) mc.setScreen(new NovaScreen(mc.currentScreen));
         Config.Settings s = Config.cur();
+        cullOn = s.entityCull;
+        cullSq = (double) s.cullDist * s.cullDist;
         if (mc.options != null && ++tickN % 10 == 0) RenderMods.sync(s);
         if (tickN % 5 == 0) DISP.clear();          // HUD text is rebuilt 4x per second, not every frame
         Adaptive.tick(mc, s);

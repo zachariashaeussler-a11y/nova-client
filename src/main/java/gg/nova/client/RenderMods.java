@@ -125,6 +125,8 @@ public class RenderMods {
         } catch (Exception ignored) {}
     }
 
+    static final java.util.HashMap<String, String> lastFail = new java.util.HashMap<>();
+
     public static void sync(Config.Settings s) {
         GameOptions o = MinecraftClient.getInstance().options;
         if (o == null) return;
@@ -135,11 +137,25 @@ public class RenderMods {
             boolean has = Config.I.backup.containsKey(key);
             if (m.on) {
                 if (n.equals("FOV") && NovaClient.savedFov >= 0) continue; // zooming
-                if (!has) { Config.I.backup.put(key, get(n, o)); changed = true; }
+                if (!has) {
+                    // FOV / render distance start from what you have now, so switching them on changes nothing
+                    if (m.val < 0 && (n.equals("FOV") || n.equals("Render Dist"))) {
+                        try { m.val = Integer.parseInt(get(n, o)); } catch (Exception ignored) {}
+                    }
+                    Config.I.backup.put(key, get(n, o));
+                    changed = true;
+                }
                 String t = target(n, s);
-                if (!t.equals(get(n, o))) set(n, o, t);
+                if (!t.equals(get(n, o))) {
+                    if (t.equals(lastFail.get(n))) continue;      // already tried this value, do not retry forever
+                    set(n, o, t);
+                    if (!t.equals(get(n, o))) lastFail.put(n, t); else lastFail.remove(n);
+                } else {
+                    lastFail.remove(n);
+                }
             } else if (has) {
                 set(n, o, Config.I.backup.remove(key));
+                lastFail.remove(n);
                 changed = true;
             }
         }

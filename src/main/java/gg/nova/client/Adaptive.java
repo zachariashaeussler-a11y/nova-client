@@ -35,12 +35,12 @@ public class Adaptive {
         sum = 0; n = 0; ticks = 0;
 
         int rd = o.getViewDistance().getValue();
-        int min = Math.min(s.adaptMin, s.adaptMax), max = Math.max(s.adaptMin, s.adaptMax);
+        int orig;
+        try { orig = Integer.parseInt(Config.I.backup.get(KEY)); } catch (Exception e) { orig = rd; }
+        int min = Math.min(s.adaptMin, orig);
         int next = rd;
-        if (rd > max) next = max;
-        else if (rd < min) next = min;
-        else if (avg < s.adaptTarget * 0.9) next = Math.max(min, rd - 1);
-        else if (avg > s.adaptTarget * 1.3) next = Math.min(max, rd + 1);
+        if (avg < s.adaptTarget * 0.9) next = Math.max(min, rd - 1);
+        else if (avg > s.adaptTarget * 1.3) next = Math.min(orig, rd + 1);   // never above your own distance
         if (next != rd) o.getViewDistance().setValue(next);
     }
 }

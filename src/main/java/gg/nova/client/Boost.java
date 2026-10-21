@@ -24,7 +24,7 @@ public class Boost {
         o.getEntityShadows().setValue(false);
         o.getAo().setValue(!max);
         o.getEnableVsync().setValue(false);
-        o.getMaxFps().setValue(max ? 260 : 144);
+        o.getMaxFps().setValue(260);          // never cap FPS
         o.write();
     }
 

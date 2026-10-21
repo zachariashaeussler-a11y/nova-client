@@ -1,6 +1,6 @@
 package gg.nova.client.mixin;
 
-import gg.nova.client.Config;
+import gg.nova.client.NovaClient;
 import net.minecraft.client.render.Frustum;
 import net.minecraft.client.render.entity.EntityRenderer;
 import net.minecraft.entity.Entity;
@@ -15,9 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class EntityRendererMixin<T extends Entity> {
     @Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true, require = 0)
     private void nova$cull(T entity, Frustum frustum, double x, double y, double z, CallbackInfoReturnable<Boolean> cir) {
-        Config.Settings s = Config.cur();
-        if (!s.entityCull || entity instanceof PlayerEntity || entity.getWidth() > 3f) return;
-        double d = s.cullDist;
-        if (entity.squaredDistanceTo(x, y, z) > d * d) cir.setReturnValue(false);
+        if (!NovaClient.cullOn || entity instanceof PlayerEntity || entity.getWidth() > 3f) return;
+        if (entity.squaredDistanceTo(x, y, z) > NovaClient.cullSq) cir.setReturnValue(false);
     }
 }

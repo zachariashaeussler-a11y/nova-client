@@ -34,7 +34,7 @@ public class Config {
         public boolean glow = false, tint = false;
         public int glowSize = 12, tintAlpha = 12, tintColor = -1;
         public String boost = "Off";
-        public boolean entityCull = true;
+        public boolean entityCull = false;
         public int cullDist = 64;
         public int unfocusedFps = 15;   // unused
         public int zoomFov = 30, fov = 90, viewDist = 12;
