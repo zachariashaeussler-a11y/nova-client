@@ -216,6 +216,18 @@ public class NovaClient implements ClientModInitializer {
         return out;
     }
 
+    /** Filled rounded rectangle (no overlapping fills, so translucent colors stay even). */
+    static void rbox(DrawContext c, int x, int y, int w, int h, int r, int col) {
+        r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+        for (int i = 0; i < r; i++) {
+            double dy = r - i - 0.5;
+            int inset = r - (int) Math.round(Math.sqrt(r * r - dy * dy));
+            c.fill(x + inset, y + i, x + w - inset, y + i + 1, col);
+            c.fill(x + inset, y + h - 1 - i, x + w - inset, y + h - i, col);
+        }
+        c.fill(x, y + r, x + w, y + h - r, col);
+    }
+
     static void outline(DrawContext c, int x, int y, int w, int h, int col) {
         c.fill(x, y, x + w, y + 1, col);
         c.fill(x, y + h - 1, x + w, y + h, col);
