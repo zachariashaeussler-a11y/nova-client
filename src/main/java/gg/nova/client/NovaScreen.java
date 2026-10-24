@@ -347,8 +347,9 @@ public class NovaScreen extends Screen {
             if (i % 2 == 0) { rowY = cy; cy += 2 * ROW; }
             if (rowY < top || rowY + 2 * ROW > bottom) continue;
             int x = cx + (i % 2) * (cw / 2 + 4), id = (rowY + scroll - top) / ROW * 2 + (i % 2);
-            if (n.equals("Sprint")) {
-                card(x, rowY, cardW, id, n, 0, m.on, v -> m.on = v, null, "Auto sprint while moving", null);
+            if (n.equals("Sprint") || n.equals("AutoRespawn") || n.equals("IdleFPS")) {
+                String d = n.equals("Sprint") ? "Auto sprint while moving" : n.equals("AutoRespawn") ? "Respawn instantly" : "20 FPS while minimized";
+                card(x, rowY, cardW, id, n, 0, m.on, v -> m.on = v, null, d, null);
             } else if (n.equals("Zoom")) {
                 card(x, rowY, cardW, id, n, 0, m.on, v -> m.on = v, null, null,
                         (y, x1, x2) -> sliderCtl(y, x1, x2, 30, 70, () -> s.zoomFov, v -> s.zoomFov = v.intValue(), k -> "FOV " + k));
@@ -366,7 +367,7 @@ public class NovaScreen extends Screen {
 
     void modulePage(String n) {
         Config.Mod m = s.mod(n);
-        boolean text = !(n.equals("Keys") || n.equals("Armor"));
+        boolean text = !(n.equals("Keys") || n.equals("Armor") || n.equals("Graph"));
         buttonRow("< Back to modules", () -> { page = null; scroll = 0; reset(); });
         header(n);
         toggleRow("Enabled", () -> m.on, v -> m.on = v);

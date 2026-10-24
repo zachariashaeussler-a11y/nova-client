@@ -10,13 +10,13 @@ import net.minecraft.client.option.GameOptions;
  */
 public class RenderMods {
     public static final String[] NAMES = {"Fullbright", "No Clouds", "No Shadows", "No Bob", "Min Particles", "Flat Light",
-            "No Blend", "No FOV Fx", "No Distort", "Uncapped", "Low Entities", "FOV", "Render Dist"};
+            "No Blend", "No FOV Fx", "No Distort", "Uncapped", "Low Entities", "FOV", "Render Dist", "Mipmaps", "Sim Dist"};
 
     public static boolean hasValue(String n) { return !(n.equals("No Shadows") || n.equals("No Bob") || n.equals("Flat Light")); }
     public static boolean isChoice(String n) { return n.equals("No Clouds") || n.equals("Min Particles"); }
 
     public static int min(String n) {
-        return switch (n) { case "Uncapped" -> 60; case "Low Entities" -> 50; case "FOV" -> 30; case "Render Dist" -> 2; default -> 0; };
+        return switch (n) { case "Uncapped" -> 60; case "Low Entities" -> 50; case "FOV" -> 30; case "Render Dist" -> 2; case "Sim Dist" -> 2; default -> 0; };
     }
     public static int max(String n) {
         return switch (n) {
@@ -27,11 +27,13 @@ public class RenderMods {
             case "Low Entities" -> 500;
             case "FOV" -> 110;
             case "Render Dist" -> 32;
+            case "Mipmaps" -> 4;
+            case "Sim Dist" -> 32;
             default -> 1;
         };
     }
     public static int def(String n) {
-        return switch (n) { case "Fullbright" -> 100; case "Uncapped" -> 260; case "Low Entities" -> 50; case "FOV" -> 90; case "Render Dist" -> 12; default -> 0; };
+        return switch (n) { case "Fullbright" -> 100; case "Uncapped" -> 260; case "Low Entities" -> 50; case "FOV" -> 90; case "Render Dist" -> 12; case "Sim Dist" -> 12; default -> 0; };
     }
     public static int value(Config.Settings s, String n) { Config.Mod m = s.mod(n); return m.val < 0 ? def(n) : m.val; }
 
@@ -47,6 +49,8 @@ public class RenderMods {
             case "Low Entities" -> "Entity range " + v + "%";
             case "FOV" -> "FOV " + v;
             case "Render Dist" -> "Render dist " + v;
+            case "Mipmaps" -> "Mipmaps " + v;
+            case "Sim Dist" -> "Sim dist " + v;
             default -> n;
         };
     }
@@ -77,6 +81,8 @@ public class RenderMods {
             case "Low Entities" -> "" + (v / 100.0);
             case "FOV" -> "" + v;
             case "Render Dist" -> "" + v;
+            case "Mipmaps" -> "" + v;
+            case "Sim Dist" -> "" + v;
             default -> "";
         };
     }
@@ -96,6 +102,8 @@ public class RenderMods {
             case "Low Entities" -> "" + o.getEntityDistanceScaling().getValue();
             case "FOV" -> "" + o.getFov().getValue();
             case "Render Dist" -> "" + o.getViewDistance().getValue();
+            case "Mipmaps" -> "" + o.getMipmapLevels().getValue();
+            case "Sim Dist" -> "" + o.getSimulationDistance().getValue();
             default -> "";
         };
     }
@@ -120,6 +128,8 @@ public class RenderMods {
                 case "Low Entities" -> o.getEntityDistanceScaling().setValue(Double.parseDouble(v));
                 case "FOV" -> o.getFov().setValue(Integer.parseInt(v));
                 case "Render Dist" -> o.getViewDistance().setValue(Integer.parseInt(v));
+                case "Mipmaps" -> o.getMipmapLevels().setValue(Integer.parseInt(v));
+                case "Sim Dist" -> o.getSimulationDistance().setValue(Integer.parseInt(v));
                 default -> { }
             }
         } catch (Exception ignored) {}
@@ -137,9 +147,10 @@ public class RenderMods {
             boolean has = Config.I.backup.containsKey(key);
             if (m.on) {
                 if (n.equals("FOV") && NovaClient.savedFov >= 0) continue; // zooming
+                if (n.equals("Uncapped") && NovaClient.idle) continue;     // IdleFPS owns the FPS cap right now
                 if (!has) {
                     // FOV / render distance start from what you have now, so switching them on changes nothing
-                    if (m.val < 0 && (n.equals("FOV") || n.equals("Render Dist"))) {
+                    if (m.val < 0 && (n.equals("FOV") || n.equals("Render Dist") || n.equals("Sim Dist"))) {
                         try { m.val = Integer.parseInt(get(n, o)); } catch (Exception ignored) {}
                     }
                     Config.I.backup.put(key, get(n, o));

@@ -24,9 +24,12 @@ public class NovaClient implements ClientModInitializer {
     public static KeyBinding menuKey, zoomKey;
 
     /** HUD modules (movable boxes). */
-    public static final String[] HUDMODS = {"FPS", "Coords", "CPS", "Ping", "Direction", "Speed", "Memory", "Clock", "Watermark", "Armor", "Keys"};
+    public static final String[] HUDMODS = {"FPS", "Frametime", "Graph", "Coords", "Chunk", "Nether", "Direction", "Angles", "Speed", "CPS", "Ping",
+            "Memory", "Clock", "Playtime", "World Time", "Health", "Hunger", "Held Item", "Server", "Watermark", "Armor", "Keys"};
     /** All modules shown in the Modules tab. */
-    public static final String[] MODS = {"FPS", "Coords", "CPS", "Ping", "Direction", "Speed", "Memory", "Clock", "Watermark", "Armor", "Keys", "Sprint", "Zoom"};
+    public static final String[] MODS = {"FPS", "Frametime", "Graph", "Coords", "Chunk", "Nether", "Direction", "Angles", "Speed", "CPS", "Ping",
+            "Memory", "Clock", "Playtime", "World Time", "Health", "Hunger", "Held Item", "Server", "Watermark", "Armor", "Keys",
+            "Sprint", "Zoom", "AutoRespawn", "IdleFPS"};
 
     /** Color choices: negative codes are special modes. */
     static final String[] PN = {"Theme", "Rainbow", "Pulse", "Wave", "Custom", "Own", "White", "Red", "Orange", "Gold", "Yellow", "Lime", "Green", "Mint",
@@ -46,6 +49,15 @@ public class NovaClient implements ClientModInitializer {
     static double speed, lx, lz;
     static int ping, tickN;
     public static int savedFov = -1;
+    public static boolean idle;                       // window unfocused and IdleFPS active
+    static int idleSaved;
+    static final long START = System.currentTimeMillis();
+    static final float[] FT = new float[60];          // last 60 frame times (ms)
+    static int fi;
+    static long lastNs;
+    static java.util.List<Box> CACHE;
+    static int cacheW, cacheH;
+    static boolean dirty = true;
     public static boolean cullOn;
     public static double cullSq;
 
@@ -70,8 +82,24 @@ public class NovaClient implements ClientModInitializer {
         cullOn = s.entityCull;
         cullSq = (double) s.cullDist * s.cullDist;
         if (mc.options != null && ++tickN % 10 == 0) RenderMods.sync(s);
-        if (tickN % 5 == 0) DISP.clear();          // HUD text is rebuilt 4x per second, not every frame
+        if (tickN % 5 == 0) { DISP.clear(); dirty = true; }   // HUD text and layout are rebuilt 4x per second, not every frame
         Adaptive.tick(mc, s);
+
+        // IdleFPS: 20 FPS while the window is in the background, your own cap back when you return
+        var mf = mc.options.getMaxFps();
+        boolean wantIdle = false;
+        if (s.mod("IdleFPS").on) {
+            long win = GLFW.glfwGetCurrentContext();
+            wantIdle = win != 0 && GLFW.glfwGetWindowAttrib(win, GLFW.GLFW_FOCUSED) == 0;
+        }
+        if (wantIdle) {
+            if (!idle) { idleSaved = mf.getValue(); idle = true; }
+            if (mf.getValue() != 20) mf.setValue(20);
+        } else if (idle) {
+            mf.setValue(idleSaved);
+            idle = false;
+        }
+
         var fov = mc.options.getFov();
         if (mc.player == null) {
             if (savedFov >= 0) { fov.setValue(savedFov); savedFov = -1; }
@@ -100,6 +128,8 @@ public class NovaClient implements ClientModInitializer {
                 && mc.player.getHungerManager().getFoodLevel() > 6) {
             mc.player.setSprinting(true);
         }
+
+        if (s.mod("AutoRespawn").on && mc.player.isDead()) mc.player.requestRespawn();
 
         boolean zoom = s.mod("Zoom").on && zoomKey.isPressed() && mc.currentScreen == null;
         if (zoom) {
@@ -159,6 +189,8 @@ public class NovaClient implements ClientModInitializer {
     public static String defaultLabel(String n) {
         return switch (n) {
             case "FPS" -> "FPS"; case "Coords" -> "XYZ"; case "CPS" -> "CPS"; case "Ping" -> "Ping";
+            case "Frametime" -> "Frame"; case "Chunk" -> "Chunk"; case "Nether" -> "Nether"; case "Angles" -> "Look";
+            case "Playtime" -> "Played"; case "Health" -> "HP"; case "Hunger" -> "Food";
             case "Direction" -> "Facing"; case "Memory" -> "RAM"; case "Watermark" -> "NOVA";
             default -> "";
         };
@@ -178,6 +210,44 @@ public class NovaClient implements ClientModInitializer {
                 yield ((rt.totalMemory() - rt.freeMemory()) >> 20) + "/" + (rt.maxMemory() >> 20) + " MB";
             }
             case "Clock" -> LocalTime.now().format(CLOCK);
+            case "Frametime" -> {
+                float sum = 0, mx = 0;
+                int c = 0;
+                for (float f : FT) if (f > 0) { sum += f; c++; mx = Math.max(mx, f); }
+                yield c == 0 ? "-" : String.format(Locale.ROOT, "%.1f ms (max %.0f)", sum / c, mx);
+            }
+            case "Chunk" -> p == null ? "0 0" : ((int) Math.floor(p.getX()) >> 4) + " " + ((int) Math.floor(p.getZ()) >> 4);
+            case "Nether" -> p == null ? "0 0 0" : (int) Math.floor(p.getX() / 8) + " " + (int) Math.floor(p.getY()) + " " + (int) Math.floor(p.getZ() / 8);
+            case "Angles" -> p == null ? "0 / 0" : Math.round(((p.getYaw() % 360) + 360) % 360) + " / " + Math.round(p.getPitch());
+            case "Playtime" -> {
+                long sec = (System.currentTimeMillis() - START) / 1000;
+                yield sec >= 3600 ? String.format(Locale.ROOT, "%d:%02d:%02d", sec / 3600, sec % 3600 / 60, sec % 60)
+                        : String.format(Locale.ROOT, "%d:%02d", sec / 60, sec % 60);
+            }
+            case "World Time" -> {
+                if (mc.world == null) yield "--:--";
+                long t = mc.world.getTimeOfDay();
+                yield String.format(Locale.ROOT, "%02d:%02d  Day %d", (int) ((t / 1000 + 6) % 24), (int) ((t % 1000) * 60 / 1000), t / 24000 + 1);
+            }
+            case "Health" -> {
+                if (p == null) yield "20.0";
+                float ab = p.getAbsorptionAmount();
+                yield String.format(Locale.ROOT, "%.1f", p.getHealth()) + (ab > 0 ? String.format(Locale.ROOT, " +%.1f", ab) : "");
+            }
+            case "Hunger" -> p == null ? "20/20" : p.getHungerManager().getFoodLevel() + "/20";
+            case "Held Item" -> {
+                if (p == null) yield "Hand";
+                ItemStack st = p.getMainHandStack();
+                if (st.isEmpty()) yield "Empty hand";
+                String nm = st.getName().getString();
+                if (st.getCount() > 1) nm += " x" + st.getCount();
+                if (st.isDamageable()) nm += "  " + (st.getMaxDamage() - st.getDamage()) + "/" + st.getMaxDamage();
+                yield nm;
+            }
+            case "Server" -> {
+                var si = mc.getCurrentServerEntry();
+                yield si != null ? si.address : (mc.isInSingleplayer() ? "Singleplayer" : "Not connected");
+            }
             case "Watermark" -> Config.I.active;
             default -> "";
         };
@@ -203,6 +273,7 @@ public class NovaClient implements ClientModInitializer {
             b.sc = base * m.scale / 100f;
             if (n.equals("Armor")) { b.w = Math.round(56 * b.sc); b.h = Math.round(72 * b.sc); }
             else if (n.equals("Keys")) { b.w = Math.round(60 * b.sc); b.h = Math.round(72 * b.sc); }
+            else if (n.equals("Graph")) { b.w = Math.round(64 * b.sc); b.h = Math.round(28 * b.sc); }
             else { String dd = DISP.get(n); if (dd == null) { dd = display(mc, s, n); DISP.put(n, dd); } b.text = dd; b.w = Math.round((tr.getWidth(b.text) + 10) * b.sc); b.h = Math.round(14 * b.sc); }
             out.add(b);
         }
@@ -270,6 +341,15 @@ public class NovaClient implements ClientModInitializer {
             key(ctx, s, m, "LMB", o.attackKey.isPressed(), 0, 40, 29, 18);
             key(ctx, s, m, "RMB", o.useKey.isPressed(), 31, 40, 29, 18);
             key(ctx, s, m, "SPACE", o.jumpKey.isPressed(), 0, 60, 60, 12);
+        } else if (b.name.equals("Graph")) {
+            if (flag(m.bgMode, s.hudBg)) ctx.fill(0, 0, 64, 28, bg);
+            float top = 16.7f;
+            for (float f : FT) top = Math.max(top, f);
+            for (int i = 0; i < 60; i++) {
+                int hh = Math.min(24, (int) (FT[(fi + i) % 60] / top * 24));
+                if (hh > 0) ctx.fill(2 + i, 26 - hh, 3 + i, 26, resolveM(s, m, i, 60));
+            }
+            ctx.fill(2, 26, 62, 27, 0x40FFFFFF);
         } else if (b.name.equals("Armor")) {
             EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
             for (int i = 0; i < 4; i++) {
@@ -323,7 +403,18 @@ public class NovaClient implements ClientModInitializer {
         int sw = ctx.getScaledWindowWidth(), sh = ctx.getScaledWindowHeight();
         effects(ctx, s, sw, sh);
         if (!s.hud) return;
-        List<Box> bs = boxes(mc, s, sw, sh);
+        if (s.mod("Frametime").on || s.mod("Graph").on) {          // only measured while one of them is on
+            long now = System.nanoTime();
+            if (lastNs > 0 && now - lastNs < 1_000_000_000L) { FT[fi] = (now - lastNs) / 1_000_000f; fi = (fi + 1) % 60; }
+            lastNs = now;
+        } else {
+            lastNs = 0;
+        }
+        if (dirty || CACHE == null || sw != cacheW || sh != cacheH || mc.currentScreen instanceof NovaScreen) {
+            CACHE = boxes(mc, s, sw, sh);
+            cacheW = sw; cacheH = sh; dirty = false;
+        }
+        List<Box> bs = CACHE;
         for (int i = 0; i < bs.size(); i++) drawBox(ctx, mc, s, bs.get(i), i, bs.size(), false);
     }
 }
