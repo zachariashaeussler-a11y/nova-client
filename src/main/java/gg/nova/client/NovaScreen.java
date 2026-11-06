@@ -16,15 +16,16 @@ import java.util.function.IntFunction;
 import java.util.function.IntSupplier;
 
 /**
- * NOVA settings menu: glass panel with a glowing edge, icon sidebar, module cards,
+ * Orbital Client settings menu: glass panel with a glowing edge, icon sidebar, module cards,
  * pill rows, animated switches and gradient sliders. Everything is custom drawn and the
  * mouse is read directly. Left-click uses a control, right-click on a chip/card goes
  * back or opens settings, the wheel scrolls.
  */
 public class NovaScreen extends Screen {
-    static final String[] TABS = {"Visuals", "Modules", "Themes", "Render", "Profiles", "Custom"};
+    static final String[] TABS = {"Visuals", "Modules", "Themes", "Performance", "Render", "Profiles", "Custom"};
     static final String[] SUBS = {"HUD, style and screen effects", "Switch modules on and tune them", "Colors and gradients",
-            "FPS boost and video options", "Save and switch setups", "Your own settings"};
+            "Live stats, FPS boost and smart options", "Video option modules", "Save and switch setups", "Your own settings"};
+    static final String[] AMB = {"Off", "Snow", "Embers", "Stars", "Rain", "Fireflies"};
     static final String[] CORNERS = {"Top left", "Top right", "Bottom left", "Bottom right"};
     static final String[] BOOST = {"Off", "Balanced", "Max", "Extreme"};
     static final String[] MODES = {"Inherit", "On", "Off"};
@@ -38,6 +39,7 @@ public class NovaScreen extends Screen {
             {"00000000", "00111100", "01000010", "10011001", "10011001", "01000010", "00111100", "00000000"},
             {"11101110", "11101110", "11101110", "00000000", "11101110", "11101110", "11101110", "00000000"},
             {"00011000", "00011000", "00111100", "01111110", "11111111", "11111111", "01111110", "00111100"},
+            {"00001100", "00011000", "00110000", "01111110", "00001100", "00011000", "00110000", "00100000"},
             {"11111111", "10000001", "10000001", "10000001", "11111111", "00011000", "00111100", "00000000"},
             {"00111100", "01111110", "01111110", "00111100", "00000000", "01111110", "11111111", "11111111"},
             {"11111111", "00011000", "00000000", "11111111", "11000000", "00000000", "11111111", "00001100"}};
@@ -65,7 +67,7 @@ public class NovaScreen extends Screen {
     Config.Mod labelMod;
     String labelFor = "", labelDef = "";
 
-    public NovaScreen(Screen parent) { super(Text.literal("NOVA Client")); this.parent = parent; }
+    public NovaScreen(Screen parent) { super(Text.literal("Orbital Client")); this.parent = parent; }
 
     @Override
     protected void init() {
@@ -335,6 +337,14 @@ public class NovaScreen extends Screen {
         sliderRow("Tint strength", 1, 60, () -> s.tintAlpha, v -> s.tintAlpha = v.intValue(), i -> i + "%");
         chipRow("Tint color", NovaClient.colorName(s.tintColor), NovaClient.resolve(s, s.tintColor, 0, 1),
                 () -> s.tintColor = NovaClient.nextColor(s.tintColor), () -> s.tintColor = NovaClient.prevColor(s.tintColor));
+        header("Ambience");
+        chipRow("Style", AMB[s.ambStyle], 0, () -> s.ambStyle = (s.ambStyle + 1) % AMB.length, () -> s.ambStyle = (s.ambStyle + AMB.length - 1) % AMB.length);
+        sliderRow("Amount", 5, 200, () -> s.ambCount, v -> s.ambCount = v.intValue(), null);
+        sliderRow("Speed", 10, 300, () -> s.ambSpeed, v -> s.ambSpeed = v.intValue(), i -> i + "%");
+        chipRow("Particle color", NovaClient.colorName(s.ambColor), NovaClient.resolve(s, s.ambColor, 0, 1),
+                () -> s.ambColor = NovaClient.nextColor(s.ambColor), () -> s.ambColor = NovaClient.prevColor(s.ambColor));
+        toggleRow("Vignette (dark edges)", () -> s.vignette, v -> s.vignette = v);
+        sliderRow("Vignette strength", 5, 90, () -> s.vigStrength, v -> s.vigStrength = v.intValue(), i -> i + "%");
     }
 
     void modules() {
@@ -367,7 +377,7 @@ public class NovaScreen extends Screen {
 
     void modulePage(String n) {
         Config.Mod m = s.mod(n);
-        boolean text = !(n.equals("Keys") || n.equals("Armor") || n.equals("Graph"));
+        boolean text = !(n.equals("Keys") || n.equals("Armor") || n.equals("Graph") || n.equals("Lyrics"));
         buttonRow("< Back to modules", () -> { page = null; scroll = 0; reset(); });
         header(n);
         toggleRow("Enabled", () -> m.on, v -> m.on = v);
@@ -384,6 +394,13 @@ public class NovaScreen extends Screen {
         sliderRow("Position X", 0, 100, () -> Math.round(curFx * 100), v -> { if (m.fy < 0) m.fy = curFy; m.fx = v.floatValue() / 100f; }, i -> i + "%");
         sliderRow("Position Y", 0, 100, () -> Math.round(curFy * 100), v -> { if (m.fx < 0) m.fx = curFx; m.fy = v.floatValue() / 100f; }, i -> i + "%");
         buttonRow("Auto position (reset)", () -> { m.fx = -1f; m.fy = -1f; });
+        if (n.equals("Lyrics")) {
+            header("Lyrics file");
+            sliderRow("Timing offset", -5000, 5000, () -> s.lyricsOffset, v -> s.lyricsOffset = v.intValue(), i -> i + " ms");
+            buttonRow("Reload lyrics file", () -> Lyrics.load());
+            note("Use your own .lrc file: config/novaclient-lyrics.lrc");
+            note(Lyrics.status);
+        }
         header("Look");
         if (text) {
             labelMod = m;
@@ -435,8 +452,70 @@ public class NovaScreen extends Screen {
         note("Pick the color \"Custom\" on a module to use it.");
     }
 
-    void renderTab() {
+    /* ---------- performance tab ---------- */
+
+    void statRow(String label, String val) {
+        int y = cy; cy += ROW;
+        if (y < top || y + ROW > bottom) return;
+        rowBg(y, false);
+        text(label, cx + 12, y + 9, MUT);
+        text(val, cx + cw - 10 - tw(val), y + 9, TXT);
+    }
+
+    void barRow(String label, float frac, String val) {
+        int y = cy; cy += ROW;
+        if (y < top || y + ROW > bottom) return;
+        rowBg(y, false);
+        text(label, cx + 12, y + 9, MUT);
+        int bx = cx + 90, bw = Math.max(20, cw - 90 - 20 - tw(val));
+        float f = Math.max(0f, Math.min(1f, frac));
+        rbox(bx, y + 10, bw, 6, 3, TRACK);
+        rbox(bx, y + 10, Math.max(4, (int) (bw * f)), 6, 3, f > 0.85f ? 0xFFFF5555 : acc());
+        text(val, cx + cw - 10 - tw(val), y + 9, TXT);
+    }
+
+    void graphRow() {
+        int y = cy; cy += 3 * ROW;
+        if (y < top || y + 3 * ROW > bottom) return;
+        rbox(cx, y + 2, cw, 3 * ROW - 4, 5, ROWBG);
+        int gx = cx + 10, gw = cw - 20, gy = y + 10, gh = 3 * ROW - 24;
+        float mx2 = 16.7f;
+        for (float f : NovaClient.FT) mx2 = Math.max(mx2, f);
+        mx2 = Math.min(mx2, 100f);
+        float[] marks = {8.3f, 16.7f, 33.3f};
+        String[] names = {"120", "60", "30"};
+        for (int k = 0; k < marks.length; k++) {
+            if (marks[k] > mx2) continue;
+            int yy = gy + gh - (int) (marks[k] / mx2 * gh);
+            ctx.fill(gx, yy, gx + gw, yy + 1, 0x30FFFFFF);
+            text(names[k], gx + gw - tw(names[k]), yy - 9, DIM);
+        }
+        int bw = Math.max(1, gw / 60);
+        for (int i = 0; i < 60; i++) {
+            float f = NovaClient.FT[(NovaClient.fi + i) % 60];
+            int h = Math.min(gh, (int) (f / mx2 * gh));
+            if (h <= 0) continue;
+            ctx.fill(gx + i * bw, gy + gh - h, gx + i * bw + Math.max(1, bw - 1), gy + gh, f > 16.7f ? 0xFFFF5555 : acc());
+        }
+    }
+
+    void performance() {
+        NovaClient.perfOpen = true;
+        java.util.Locale loc = java.util.Locale.ROOT;
+        float[] st = NovaClient.frameStats();
+        header("Live");
+        statRow("FPS now", "" + client.getCurrentFps());
+        statRow("Average frame", st[0] <= 0 ? "measuring..." : String.format(loc, "%.1f ms  (%d FPS)", st[0], Math.round(1000f / st[0])));
+        statRow("Worst frame", st[1] <= 0 ? "-" : String.format(loc, "%.1f ms", st[1]));
+        statRow("5% low", st[2] <= 0 ? "-" : String.format(loc, "%d FPS", Math.round(1000f / st[2])));
+        Runtime rt = Runtime.getRuntime();
+        long used = (rt.totalMemory() - rt.freeMemory()) >> 20, max = rt.maxMemory() >> 20;
+        barRow("Memory", max == 0 ? 0f : used / (float) max, used + " / " + max + " MB");
+        statRow("Render / simulation", client.options.getViewDistance().getValue() + " / " + client.options.getSimulationDistance().getValue() + " chunks");
+        graphRow();
+        note("Measured while this menu is open. Close it to compare.");
         header("FPS boost");
+        chipRow("Preset", s.boost, 0, () -> boost(1), () -> boost(BOOST.length - 1));
         buttonRow("Restore my video settings (turn everything off)", () -> {
             s.boost = "Off";
             Boost.apply("Off");
@@ -446,15 +525,25 @@ public class NovaScreen extends Screen {
             Adaptive.tick(client, s);
             Config.save();
         });
-        chipRow("Preset", s.boost, 0, () -> boost(1), () -> boost(BOOST.length - 1));
+        note("A preset edits your video settings; Off restores them.");
+        header("Smart options");
         toggleRow("Entity culling", () -> s.entityCull, v -> s.entityCull = v);
         sliderRow("Cull distance", 16, 128, () -> s.cullDist, v -> s.cullDist = v.intValue(), i -> i + " blocks");
-        note("A preset edits your video settings; Off restores them.");
-        header("Adaptive render distance");
         toggleRow("Auto-adjust render distance", () -> s.adaptOn, v -> s.adaptOn = v);
         sliderRow("Target FPS", 30, 360, () -> s.adaptTarget, v -> s.adaptTarget = v.intValue(), null);
         sliderRow("Minimum distance", 2, 32, () -> s.adaptMin, v -> s.adaptMin = v.intValue(), i -> i + " chunks");
-        note("Only lowers below your own distance, never above it."); 
+        note("Auto-adjust only lowers below your own distance.");
+        toggleRow("Lower FPS when minimized", () -> s.mod("IdleFPS").on, v -> s.mod("IdleFPS").on = v);
+        header("Quick toggles");
+        for (String n : new String[]{"No Clouds", "No Shadows", "Min Particles", "Flat Light", "No Blend", "Mipmaps", "Low Entities"})
+            toggleRow(n, () -> s.mod(n).on, v -> s.mod(n).on = v);
+        note("Tune their values in the Render tab.");
+        header("Tips");
+        note("Biggest wins: lower resolution scale, drop heavy visual mods.");
+        note("Switch on Frametime and Graph in Modules to track stutter.");
+    }
+
+    void renderTab() {
         header("Render modules");
         int cardW = cw / 2 - 4, rowY = 0;
         for (int i = 0; i < RenderMods.NAMES.length; i++) {
@@ -574,6 +663,7 @@ public class NovaScreen extends Screen {
         ctx = c;
         s = Config.cur();
         applyStyle();
+        NovaClient.perfOpen = false;               // the Performance tab sets this again while it is shown
         mx = mouseX; my = mouseY;
         long win = GLFW.glfwGetCurrentContext();
         boolean l = GLFW.glfwGetMouseButton(win, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
@@ -603,13 +693,13 @@ public class NovaScreen extends Screen {
 
         // logo
         if (classic) {
-            text("NOVA CLIENT", px + 16, py + 20, 0xFFFFFFFF);
+            text("ORBITAL CLIENT", px + 16, py + 20, 0xFFFFFFFF);
         } else {
-            String logo = "NOVA";
+            String logo = "ORBITAL";
             int lx = px + 20;
             for (int i = 0; i < logo.length(); i++) {
                 String ch = "" + logo.charAt(i);
-                big(ch, lx, py + 15, 1.6f, mix(s.accent, s.accent2, i / 3f));
+                big(ch, lx, py + 15, 1.6f, mix(s.accent, s.accent2, i / (float) (logo.length() - 1)));
                 lx += (int) (tw(ch) * 1.6f) + 2;
             }
             text("CLIENT", px + 21, py + 31, MUT);
@@ -638,7 +728,7 @@ public class NovaScreen extends Screen {
         rbox(px + 12, py + H - 42, 104, 30, 6, ph ? CARDHOV : CARD);
         text("PROFILE", px + 20, py + H - 37, DIM);
         text(pr, px + 20, py + H - 26, TXT);
-        if (ph && pressL) { tab = 4; scroll = 0; page = null; reset(); pressL = false; }
+        if (ph && pressL) { tab = 5; scroll = 0; page = null; reset(); pressL = false; }
 
         // page title
         String title = tab == 1 && page != null ? page + " settings" : TABS[tab];
@@ -654,8 +744,9 @@ public class NovaScreen extends Screen {
             case 0 -> visuals();
             case 1 -> modules();
             case 2 -> themes();
-            case 3 -> renderTab();
-            case 4 -> profiles();
+            case 3 -> performance();
+            case 4 -> renderTab();
+            case 5 -> profiles();
             default -> custom();
         }
         int total = (cy + scroll) - top;
@@ -683,6 +774,9 @@ public class NovaScreen extends Screen {
 
         if (pending != null) { Runnable p = pending; pending = null; p.run(); }
     }
+
+    @Override
+    public void removed() { NovaClient.perfOpen = false; }
 
     @Override
     public void close() {

@@ -39,6 +39,9 @@ public class Config {
         public int unfocusedFps = 15;   // unused
         public int zoomFov = 30, fov = 90, viewDist = 12;
         public boolean guiClassic = true;   // menu style: classic (old Minecraft look) or modern
+        public int ambStyle = 0, ambCount = 60, ambSpeed = 100, ambColor = -1;   // ambience particles
+        public boolean vignette = false;
+        public int vigStrength = 40, lyricsOffset = 0;
         public boolean adaptOn = false;
         public int adaptTarget = 120, adaptMin = 5, adaptMax = 16;
         public Map<String, Mod> mods = new LinkedHashMap<>();

@@ -21,14 +21,15 @@ import java.util.List;
 import java.util.Locale;
 
 public class NovaClient implements ClientModInitializer {
-    public static KeyBinding menuKey, zoomKey;
+    public static KeyBinding menuKey, zoomKey, lyricsKey;
+    public static boolean perfOpen;                    // Performance tab is open: keep sampling frame times
 
     /** HUD modules (movable boxes). */
     public static final String[] HUDMODS = {"FPS", "Frametime", "Graph", "Coords", "Chunk", "Nether", "Direction", "Angles", "Speed", "CPS", "Ping",
-            "Memory", "Clock", "Playtime", "World Time", "Health", "Hunger", "Held Item", "Server", "Watermark", "Armor", "Keys"};
+            "Memory", "Clock", "Playtime", "World Time", "Health", "Hunger", "Held Item", "Server", "Lyrics", "Watermark", "Armor", "Keys"};
     /** All modules shown in the Modules tab. */
     public static final String[] MODS = {"FPS", "Frametime", "Graph", "Coords", "Chunk", "Nether", "Direction", "Angles", "Speed", "CPS", "Ping",
-            "Memory", "Clock", "Playtime", "World Time", "Health", "Hunger", "Held Item", "Server", "Watermark", "Armor", "Keys",
+            "Memory", "Clock", "Playtime", "World Time", "Health", "Hunger", "Held Item", "Server", "Lyrics", "Watermark", "Armor", "Keys",
             "Sprint", "Zoom", "AutoRespawn", "IdleFPS"};
 
     /** Color choices: negative codes are special modes. */
@@ -43,6 +44,7 @@ public class NovaClient implements ClientModInitializer {
     public static int prevColor(int code) { return PC[(idxOf(code) + PC.length - 1) % PC.length]; }
 
     static final java.util.HashMap<String, String> DISP = new java.util.HashMap<>();
+    static final String[] SAMPLE_LY = {"Your current lyric line", "The next line appears here"};
     static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
     static final ArrayDeque<Long> clicksL = new ArrayDeque<>(), clicksR = new ArrayDeque<>();
     static boolean wasL, wasR;
@@ -70,6 +72,8 @@ public class NovaClient implements ClientModInitializer {
                 "key.novaclient.menu", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, category));
         zoomKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.novaclient.zoom", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_Z, category));
+        lyricsKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.novaclient.lyrics", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_K, category));
         ClientTickEvents.END_CLIENT_TICK.register(NovaClient::tick);
         HudRenderCallback.EVENT.register((ctx, tick) -> hud(ctx));
     }
@@ -79,6 +83,7 @@ public class NovaClient implements ClientModInitializer {
     static void tick(MinecraftClient mc) {
         while (menuKey.wasPressed()) mc.setScreen(new NovaScreen(mc.currentScreen));
         Config.Settings s = Config.cur();
+        while (lyricsKey.wasPressed()) { if (s.mod("Lyrics").on) Lyrics.toggle(); }
         cullOn = s.entityCull;
         cullSq = (double) s.cullDist * s.cullDist;
         if (mc.options != null && ++tickN % 10 == 0) RenderMods.sync(s);
@@ -191,7 +196,7 @@ public class NovaClient implements ClientModInitializer {
             case "FPS" -> "FPS"; case "Coords" -> "XYZ"; case "CPS" -> "CPS"; case "Ping" -> "Ping";
             case "Frametime" -> "Frame"; case "Chunk" -> "Chunk"; case "Nether" -> "Nether"; case "Angles" -> "Look";
             case "Playtime" -> "Played"; case "Health" -> "HP"; case "Hunger" -> "Food";
-            case "Direction" -> "Facing"; case "Memory" -> "RAM"; case "Watermark" -> "NOVA";
+            case "Direction" -> "Facing"; case "Memory" -> "RAM"; case "Watermark" -> "ORBITAL";
             default -> "";
         };
     }
@@ -274,6 +279,7 @@ public class NovaClient implements ClientModInitializer {
             if (n.equals("Armor")) { b.w = Math.round(56 * b.sc); b.h = Math.round(72 * b.sc); }
             else if (n.equals("Keys")) { b.w = Math.round(60 * b.sc); b.h = Math.round(72 * b.sc); }
             else if (n.equals("Graph")) { b.w = Math.round(64 * b.sc); b.h = Math.round(28 * b.sc); }
+            else if (n.equals("Lyrics")) { b.w = Math.round(240 * b.sc); b.h = Math.round(30 * b.sc); }
             else { String dd = DISP.get(n); if (dd == null) { dd = display(mc, s, n); DISP.put(n, dd); } b.text = dd; b.w = Math.round((tr.getWidth(b.text) + 10) * b.sc); b.h = Math.round(14 * b.sc); }
             out.add(b);
         }
@@ -341,6 +347,12 @@ public class NovaClient implements ClientModInitializer {
             key(ctx, s, m, "LMB", o.attackKey.isPressed(), 0, 40, 29, 18);
             key(ctx, s, m, "RMB", o.useKey.isPressed(), 31, 40, 29, 18);
             key(ctx, s, m, "SPACE", o.jumpKey.isPressed(), 0, 60, 60, 12);
+        } else if (b.name.equals("Lyrics")) {
+            String[] ly = preview && !Lyrics.running ? SAMPLE_LY : Lyrics.current(s);
+            if (flag(m.bgMode, s.hudBg)) ctx.fill(0, 0, 240, 30, bg);
+            String cur = tr.trimToWidth(ly[0], 228), nxt = tr.trimToWidth(ly[1], 228);
+            ctx.drawText(tr, cur, (240 - tr.getWidth(cur)) / 2, 4, resolveM(s, m, 0, 1), sh);
+            ctx.drawText(tr, nxt, (240 - tr.getWidth(nxt)) / 2, 17, 0xFF9AA0B8, false);
         } else if (b.name.equals("Graph")) {
             if (flag(m.bgMode, s.hudBg)) ctx.fill(0, 0, 64, 28, bg);
             float top = 16.7f;
@@ -393,6 +405,103 @@ public class NovaClient implements ClientModInitializer {
             ctx.fillGradient(0, 0, sw, g, 0x88000000 | c1, c1);
             ctx.fillGradient(0, sh - g, sw, sh, c2, 0x88000000 | c2);
         }
+        ambience(ctx, s, sw, sh);
+        vignette(ctx, s, sw, sh);
+    }
+
+    /* ---------------- ambience particles + vignette ---------------- */
+
+    static final float[] AX = new float[200], AY = new float[200], AP = new float[200];
+    static int aStyle = -1, aCount = -1, aW, aH;
+    static long aLast;
+
+    static void ambience(DrawContext ctx, Config.Settings s, int sw, int sh) {
+        if (s.ambStyle == 0) return;
+        int n = Math.max(1, Math.min(200, s.ambCount));
+        if (aStyle != s.ambStyle || aCount != n || aW != sw || aH != sh) {
+            for (int i = 0; i < 200; i++) {
+                AX[i] = (float) Math.random() * sw;
+                AY[i] = (float) Math.random() * sh;
+                AP[i] = (float) (Math.random() * 6.283);
+            }
+            aStyle = s.ambStyle; aCount = n; aW = sw; aH = sh;
+        }
+        long now = System.nanoTime();
+        float dt = aLast == 0 ? 0.016f : Math.min(0.05f, (now - aLast) / 1e9f);
+        aLast = now;
+        float sp = s.ambSpeed / 100f, t = (now / 1_000_000L % 1_000_000L) / 1000f;
+        for (int i = 0; i < n; i++) {
+            int col = resolve(s, s.ambColor, i, n) & 0xFFFFFF;
+            float vary = 0.6f + 0.8f * (i % 5) / 5f;
+            switch (s.ambStyle) {
+                case 1 -> {                                           // snow
+                    AY[i] += 28 * sp * vary * dt;
+                    AX[i] += (float) Math.sin(t * 0.8 + AP[i]) * 10 * dt;
+                    if (AY[i] > sh) { AY[i] = -3; AX[i] = (float) Math.random() * sw; }
+                    int sz = i % 3 == 0 ? 2 : 1;
+                    ctx.fill((int) AX[i], (int) AY[i], (int) AX[i] + sz, (int) AY[i] + sz, 0xC0000000 | col);
+                }
+                case 2 -> {                                           // embers
+                    AY[i] -= 36 * sp * vary * dt;
+                    AX[i] += (float) Math.sin(t * 1.3 + AP[i]) * 14 * dt;
+                    if (AY[i] < -3) { AY[i] = sh + 3; AX[i] = (float) Math.random() * sw; }
+                    int a = (int) (0x60 + 0x90 * (0.5 + 0.5 * Math.sin(t * 6 + AP[i])));
+                    ctx.fill((int) AX[i], (int) AY[i], (int) AX[i] + 2, (int) AY[i] + 2, (a << 24) | col);
+                }
+                case 3 -> {                                           // twinkling stars
+                    int a = (int) (0x30 + 0x90 * (0.5 + 0.5 * Math.sin(t * 2 + AP[i] * 3)));
+                    ctx.fill((int) AX[i], (int) AY[i], (int) AX[i] + 1, (int) AY[i] + 1, (a << 24) | col);
+                }
+                case 4 -> {                                           // rain
+                    AY[i] += 360 * sp * vary * dt;
+                    AX[i] -= 50 * sp * dt;
+                    if (AY[i] > sh) { AY[i] = -8; AX[i] = (float) Math.random() * (sw + 60); }
+                    ctx.fill((int) AX[i], (int) AY[i], (int) AX[i] + 1, (int) AY[i] + 6, 0x90000000 | col);
+                }
+                default -> {                                          // fireflies
+                    AX[i] += (float) Math.cos(t * 0.7 + AP[i] * 2) * 18 * sp * dt;
+                    AY[i] += (float) Math.sin(t * 0.5 + AP[i]) * 18 * sp * dt;
+                    if (AX[i] < 0) AX[i] += sw;
+                    if (AX[i] > sw) AX[i] -= sw;
+                    if (AY[i] < 0) AY[i] += sh;
+                    if (AY[i] > sh) AY[i] -= sh;
+                    int a = (int) (0x40 + 0xB0 * (0.5 + 0.5 * Math.sin(t * 2.2 + AP[i] * 5)));
+                    int x = (int) AX[i], y = (int) AY[i];
+                    ctx.fill(x - 1, y - 1, x + 3, y + 3, ((a / 4) << 24) | col);
+                    ctx.fill(x, y, x + 2, y + 2, (a << 24) | col);
+                }
+            }
+        }
+    }
+
+    static void vignette(DrawContext ctx, Config.Settings s, int sw, int sh) {
+        if (!s.vignette) return;
+        int a0 = (int) (s.vigStrength * 2.55f);
+        int vh = (int) (sh * 0.22f);
+        ctx.fillGradient(0, 0, sw, vh, a0 << 24, 0);
+        ctx.fillGradient(0, sh - vh, sw, sh, 0, a0 << 24);
+        int vw = (int) (sw * 0.16f);
+        for (int i = 0; i < 16; i++) {
+            float k = 1 - i / 16f;
+            int a = (int) (a0 * k * k);
+            int x0 = i * vw / 16, x1 = (i + 1) * vw / 16;
+            ctx.fill(x0, 0, x1, sh, a << 24);
+            ctx.fill(sw - x1, 0, sw - x0, sh, a << 24);
+        }
+    }
+
+    /** {average ms, worst ms, average of the worst 5% ms} over the last 60 frames. */
+    public static float[] frameStats() {
+        float[] tmp = new float[60];
+        int c = 0;
+        float sum = 0;
+        for (float f : FT) if (f > 0) { tmp[c++] = f; sum += f; }
+        if (c == 0) return new float[]{0, 0, 0};
+        java.util.Arrays.sort(tmp, 0, c);
+        int k = Math.max(1, c / 20);
+        float low = 0;
+        for (int i = c - k; i < c; i++) low += tmp[i];
+        return new float[]{sum / c, tmp[c - 1], low / k};
     }
 
     static void hud(DrawContext ctx) {
@@ -402,14 +511,14 @@ public class NovaClient implements ClientModInitializer {
         if (mc.currentScreen instanceof HudEditor) return;
         int sw = ctx.getScaledWindowWidth(), sh = ctx.getScaledWindowHeight();
         effects(ctx, s, sw, sh);
-        if (!s.hud) return;
-        if (s.mod("Frametime").on || s.mod("Graph").on) {          // only measured while one of them is on
+        if (s.mod("Frametime").on || s.mod("Graph").on || perfOpen) {   // only measured while needed
             long now = System.nanoTime();
             if (lastNs > 0 && now - lastNs < 1_000_000_000L) { FT[fi] = (now - lastNs) / 1_000_000f; fi = (fi + 1) % 60; }
             lastNs = now;
         } else {
             lastNs = 0;
         }
+        if (!s.hud) return;
         if (dirty || CACHE == null || sw != cacheW || sh != cacheH || mc.currentScreen instanceof NovaScreen) {
             CACHE = boxes(mc, s, sw, sh);
             cacheW = sw; cacheH = sh; dirty = false;

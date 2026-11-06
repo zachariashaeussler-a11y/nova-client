@@ -1,5 +1,6 @@
 {
-  "key.novaclient.menu": "Open NOVA menu",
+  "key.novaclient.menu": "Open Orbital menu",
   "key.novaclient.zoom": "Zoom (Zoom module)",
-  "key.category.novaclient.main": "NOVA Client"
+  "key.novaclient.lyrics": "Lyrics start / stop (Lyrics module)",
+  "key.category.novaclient.main": "Orbital Client"
 }

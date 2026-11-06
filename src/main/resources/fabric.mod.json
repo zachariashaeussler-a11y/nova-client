@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "novaclient",
   "version": "${version}",
-  "name": "NOVA Client",
+  "name": "Orbital Client",
   "description": "Client-side settings hub with themes, profiles, custom settings and built-in FPS boost.",
   "authors": ["You"],
   "environment": "client",
